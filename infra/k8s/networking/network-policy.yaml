@@ -13,7 +13,6 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: koral-system
-    # Allow Prometheus scraping from kube-system (node-exporter, cadvisor)
     - from:
         - namespaceSelector:
             matchLabels:
@@ -23,13 +22,18 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: koral-system
-    # Allow DNS (UDP + TCP)
+    # Allow reaching Prometheus + Fluentd in ai-observability
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ai-observability
+    # Allow DNS
     - ports:
         - port: 53
           protocol: UDP
         - port: 53
           protocol: TCP
-    # Allow reaching Kubernetes API server
+    # Allow Kubernetes API server
     - ports:
         - port: 443
           protocol: TCP

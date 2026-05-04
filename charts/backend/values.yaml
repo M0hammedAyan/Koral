@@ -18,5 +18,6 @@ resources:
     memory: "256Mi"
 
 env:
-  PROMETHEUS_URL: "http://monitoring-kube-prometheus-prometheus.koral-system:9090"
+  PROMETHEUS_URL: "http://monitoring-kube-prometheus-prometheus.ai-observability:9090"
   NAMESPACE: "koral-system"
+  CORRELATION_ENGINE_URL: "http://correlation-engine:8005"

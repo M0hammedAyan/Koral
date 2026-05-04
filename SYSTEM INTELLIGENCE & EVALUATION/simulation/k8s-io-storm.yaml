@@ -10,7 +10,7 @@ spec:
   serviceAccountName: koral-agent
   containers:
     - name: io-storm
-      image: yourdockerhub/koral-simulation:latest
+      image: DOCKERHUB_USERNAME/koral-simulation:latest
       env:
         - name: SCENARIO
           value: io_storm

@@ -18,8 +18,8 @@ resources:
     memory: "128Mi"
 
 env:
-  PROMETHEUS_URL: "http://monitoring-kube-prometheus-prometheus.koral-system:9090"
+  PROMETHEUS_URL: "http://monitoring-kube-prometheus-prometheus.ai-observability:9090"
   NAMESPACE: "koral-system"
   BACKEND_URL: "http://backend:8000"
-  FLUENTD_HOST: "fluentd"
-  FLUENTD_PORT: "24224"
+  FLUENTD_HOST: "fluentd.ai-observability"
+  FLUENTD_PORT: "24231"

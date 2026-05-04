@@ -60,7 +60,7 @@ def run():
     results = []
     for s in SCENARIOS:
         pod, metric = s["pod"], s["metric"]
-        print(f"\n[TEST] {metric.upper()} — pod: {pod}")
+        print(f"\n[TEST] {metric.upper()} - pod: {pod}")
 
         anomaly_ok = wait_for_anomaly(pod, metric)
         print(f"  Anomaly detected : {'PASS' if anomaly_ok else 'FAIL'}")

@@ -56,7 +56,7 @@ def validate_scenario(name: str) -> dict:
     pod, metric = cfg["pod"], cfg["metric"]
 
     print(f"\n{'='*50}")
-    print(f" Scenario: {name.upper().replace('_', ' ')} — pod: {pod}")
+    print(f" Scenario: {name.upper().replace('_', ' ')} - pod: {pod}")
     print(f"{'='*50}")
 
     checks = {}

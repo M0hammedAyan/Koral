@@ -1,8 +1,8 @@
 #!/bin/bash
-# KORAL System Health Check
-# Run after deploy-all.sh to validate the full system
+# KORAL System Health Check — run after deploy-all.sh
 
-KUBECTL="/mnt/c/Program Files/Docker/Docker/resources/bin/kubectl.exe"
+KUBECTL="${KUBECTL_BIN:-$(which kubectl 2>/dev/null || echo "/mnt/c/Program Files/Docker/Docker/resources/bin/kubectl.exe")}"
+MINIKUBE="${MINIKUBE_BIN:-$(which minikube 2>/dev/null || echo "/mnt/c/Program Files/Kubernetes/Minikube/minikube.exe")}"
 NS=koral-system
 PASS=0
 FAIL=0
@@ -38,15 +38,15 @@ echo ""
 echo "--- Core Pods Running ---"
 for svc in cpu memory storage logs backend frontend correlation; do
   check "Pod: $svc" \
-    "\"$KUBECTL\" get pods -n $NS -l app=$svc --field-selector=status.phase=Running | grep -q Running"
+    "\"$KUBECTL\" get pods -n $NS --no-headers | grep '^$svc' | grep -q 'Running'"
 done
 
 echo ""
 echo "--- Monitoring ---"
 check "Prometheus pod running" \
-  "\"$KUBECTL\" get pods -n $NS | grep -q 'monitoring-kube-prometheus-prometheus'"
+  "\"$KUBECTL\" get pods -n $NS --no-headers | grep -q 'prometheus.*Running'"
 check "Fluentd pod running" \
-  "\"$KUBECTL\" get pods -n $NS | grep -q 'fluentd'"
+  "\"$KUBECTL\" get pods -n $NS --no-headers | grep -q 'fluentd.*Running'"
 
 echo ""
 echo "--- Services Exist ---"
@@ -57,12 +57,12 @@ done
 
 echo ""
 echo "--- Restart Count Check ---"
-RESTARTS=$("$KUBECTL" get pods -n $NS --no-headers 2>/dev/null | awk '{print $4}' | grep -v '^0$' | wc -l)
+RESTARTS=$("$KUBECTL" get pods -n $NS --no-headers 2>/dev/null | awk '{print $4}' | grep -v '^0$' | wc -l | tr -d ' ')
 if [ "$RESTARTS" -eq 0 ]; then
   echo "  [PASS] No pod restarts detected"
   PASS=$((PASS+1))
 else
-  echo "  [WARN] $RESTARTS pod(s) have restarted — check logs"
+  echo "  [WARN] $RESTARTS pod(s) have restarted - check logs"
   FAIL=$((FAIL+1))
 fi
 
@@ -72,6 +72,16 @@ check "ServiceAccount koral-agent exists" \
   "\"$KUBECTL\" get serviceaccount koral-agent -n $NS"
 check "ClusterRoleBinding exists" \
   "\"$KUBECTL\" get clusterrolebinding koral-agent-binding"
+
+echo ""
+echo "--- Backend API ---"
+BACKEND_URL=$("$MINIKUBE" service backend -n $NS --url 2>/dev/null || echo "")
+if [ -n "$BACKEND_URL" ]; then
+  check "Backend /health responds" \
+    "curl -sf $BACKEND_URL/health"
+else
+  echo "  [SKIP] Backend URL unavailable - run: minikube service backend -n $NS --url"
+fi
 
 echo ""
 echo "=============================="

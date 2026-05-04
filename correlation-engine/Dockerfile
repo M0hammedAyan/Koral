@@ -1,9 +1,7 @@
-# Dockerfile — Correlation Engine (stub)
-# Member 1 replaces this with the real implementation
 FROM python:3.11-slim
 WORKDIR /app
-COPY requirements.txt* ./
-RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
-COPY . .
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY main.py .
 EXPOSE 8005
-CMD ["python", "main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8005"]
