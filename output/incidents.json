@@ -1,0 +1,9 @@
+{
+    "incident_id": "INC-001",
+    "root_cause": "Storage I/O spike caused CPU overload",
+    "confidence": 1.0,
+    "affected_pods": [
+        "koral-system/pod-A",
+        "koral-system/pod-B"
+    ]
+}

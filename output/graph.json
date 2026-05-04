@@ -1,0 +1,14 @@
+{
+    "nodes": [
+        "koral-system/pod-A",
+        "koral-system/pod-B"
+    ],
+    "edges": [
+        {
+            "source": "koral-system/pod-A",
+            "target": "koral-system/pod-B",
+            "correlation": 0.9999999999999999,
+            "lag": 1
+        }
+    ]
+}
