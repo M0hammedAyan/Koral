@@ -1,0 +1,88 @@
+name: KORAL CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: docker.io
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: cpu-agent
+            context: ./agents/cpu-agent
+            port: 8001
+          - name: memory-agent
+            context: ./agents/memory-agent
+            port: 8002
+          - name: storage-agent
+            context: ./agents/storage-agent
+            port: 8003
+          - name: log-agent
+            context: ./agents/log-agent
+            port: 8004
+          - name: koral-backend
+            context: ./backend
+            port: 8000
+          - name: koral-frontend
+            context: ./frontend
+            port: 3000
+          - name: koral-correlation-engine
+            context: ./correlation-engine
+            port: 8005
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service.name }}:latest,${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service.name }}:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+
+      - name: Configure kubeconfig
+        run: echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Deploy all charts
+        run: |
+          NS=koral-system
+          TAG=${{ github.sha }}
+          REPO=${{ secrets.DOCKERHUB_USERNAME }}
+
+          helm upgrade --install cpu         ./charts/cpu-agent          -n $NS --set image.repository=$REPO/cpu-agent          --set image.tag=$TAG --wait
+          helm upgrade --install memory      ./charts/memory-agent        -n $NS --set image.repository=$REPO/memory-agent        --set image.tag=$TAG --wait
+          helm upgrade --install storage     ./charts/storage-agent       -n $NS --set image.repository=$REPO/storage-agent       --set image.tag=$TAG --wait
+          helm upgrade --install logs        ./charts/log-agent           -n $NS --set image.repository=$REPO/log-agent           --set image.tag=$TAG --wait
+          helm upgrade --install backend     ./charts/backend             -n $NS --set image.repository=$REPO/koral-backend       --set image.tag=$TAG --wait
+          helm upgrade --install frontend    ./charts/frontend            -n $NS --set image.repository=$REPO/koral-frontend      --set image.tag=$TAG --wait
+          helm upgrade --install correlation ./charts/correlation-engine  -n $NS --set image.repository=$REPO/koral-correlation-engine --set image.tag=$TAG --wait

@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Minikube / Kubernetes local state
+.minikube/
+kubeconfig
+*.kubeconfig
+
+# Helm cache
+.helm/
+
+# Editor
+.vscode/
+.idea/
+*.swp

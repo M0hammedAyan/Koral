@@ -1,0 +1,22 @@
+replicaCount: 1
+
+image:
+  repository: koral-correlation-engine
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8005
+
+resources:
+  limits:
+    cpu: "1"
+    memory: "512Mi"
+  requests:
+    cpu: "200m"
+    memory: "256Mi"
+
+env:
+  BACKEND_URL: "http://backend:8000"
+  NAMESPACE: "koral-system"

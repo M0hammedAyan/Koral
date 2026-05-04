@@ -1,0 +1,38 @@
+kind: DaemonSet
+
+tolerations:
+  - key: node-role.kubernetes.io/master
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    effect: NoSchedule
+
+env: []
+
+fileConfigs:
+  01_sources.conf: |-
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag koral.*
+      read_from_head true
+      <parse>
+        @type json
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </source>
+
+  02_filters.conf: |-
+    <filter koral.**>
+      @type record_transformer
+      <record>
+        cluster koral
+        namespace ${record["kubernetes"]["namespace_name"]}
+        pod ${record["kubernetes"]["pod_name"]}
+      </record>
+    </filter>
+
+  03_outputs.conf: |-
+    <match koral.**>
+      @type stdout
+    </match>
