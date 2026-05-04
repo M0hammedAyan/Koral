@@ -1,7 +1,5 @@
-<<<<<<< HEAD
 # Korel
 a correlation engine that doesn’t just detect failures, but explains why they happen in real time.
-=======
 # KORAL — Kubernetes Observability with Real-time ArtificialIntelligence Logic
 
 > **Member 2 — Infrastructure & DevOps**
@@ -392,4 +390,3 @@ minikube service frontend -n koral-system
 # Or get the URL manually:
 minikube service frontend -n koral-system --url
 ```
->>>>>>> MohammedAyan
