@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: io-storm-pvc
+  namespace: koral-system
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: io-storm-sim
+  namespace: koral-system
+  labels:
+    app: io-storm-sim
+    role: simulation
+spec:
+  containers:
+    - name: io-storm
+      image: busybox
+      command: ["sh", "-c", "while true; do dd if=/dev/urandom of=/data/test bs=1M count=512 oflag=direct; done"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "256Mi"
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: io-storm-pvc
+  restartPolicy: Never

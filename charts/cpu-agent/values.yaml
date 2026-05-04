@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  repository: cpu-agent
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8001
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+env:
+  PROMETHEUS_URL: "http://monitoring-kube-prometheus-prometheus.koral-system:9090"
+  NAMESPACE: "koral-system"
+  BACKEND_URL: "http://backend:8000"

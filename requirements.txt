@@ -1,0 +1,74 @@
+# KORAL Infrastructure — Tool Requirements
+# Member 2 (DevOps) — these are the required versions for the infrastructure layer
+#
+# This is NOT a Python requirements file.
+# It documents the exact tool versions needed to run, deploy, and operate KORAL.
+# Install each tool before running any script in scripts/
+#
+# ─────────────────────────────────────────────
+# REQUIRED TOOLS
+# ─────────────────────────────────────────────
+
+# Kubernetes local cluster
+minikube >= 1.32.0
+# Install: https://minikube.sigs.k8s.io/docs/start/
+# Windows: winget install Kubernetes.minikube
+
+# Kubernetes CLI
+kubectl >= 1.28.0
+# Install: https://kubernetes.io/docs/tasks/tools/
+# Windows: winget install Kubernetes.kubectl
+
+# Helm — Kubernetes package manager
+helm >= 3.12.0
+# Install: https://helm.sh/docs/intro/install/
+# Windows: winget install Helm.Helm
+
+# Container runtime
+docker >= 24.0.0
+# Install: https://docs.docker.com/get-docker/
+# Windows: Docker Desktop
+
+# ─────────────────────────────────────────────
+# HELM CHART DEPENDENCIES (installed by bootstrap.sh)
+# ─────────────────────────────────────────────
+
+# Prometheus monitoring stack
+# Repo: https://prometheus-community.github.io/helm-charts
+# Chart: kube-prometheus-stack >= 55.0.0
+# Includes: Prometheus, Alertmanager, Grafana, cAdvisor, node_exporter
+
+# Fluentd log collector
+# Repo: https://fluent.github.io/helm-charts
+# Chart: fluentd >= 0.5.0
+
+# ─────────────────────────────────────────────
+# CLUSTER RESOURCE REQUIREMENTS
+# ─────────────────────────────────────────────
+
+# Minimum:
+#   CPU:    4 cores
+#   RAM:    8192 MB (8 GB)
+#   Disk:   20 GB free
+
+# ─────────────────────────────────────────────
+# OPTIONAL (CI/CD only)
+# ─────────────────────────────────────────────
+
+# GitHub Actions runner (ubuntu-latest) — used in .github/workflows/ci-cd.yaml
+# DockerHub account — for image push/pull
+# base64-encoded kubeconfig stored as GitHub secret KUBECONFIG
+
+# ─────────────────────────────────────────────
+# PYTHON STUB REQUIREMENTS (per service)
+# Each teammate must provide a requirements.txt in their service directory.
+# The stub Dockerfiles will install it automatically.
+# ─────────────────────────────────────────────
+
+# agents/cpu-agent/requirements.txt      → Member 3
+# agents/memory-agent/requirements.txt   → Member 3
+# agents/storage-agent/requirements.txt  → Member 3
+# agents/log-agent/requirements.txt      → Member 3
+# backend/requirements.txt               → Member 3
+# correlation-engine/requirements.txt    → Member 1
+# frontend/package.json                  → Member 4
