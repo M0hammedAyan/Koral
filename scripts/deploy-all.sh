@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-HELM="/mnt/c/Users/moham/AppData/Local/Microsoft/WinGet/Links/helm.exe"
-KUBECTL="/mnt/c/Program Files/Docker/Docker/resources/bin/kubectl.exe"
+HELM="${HELM:-helm}"
+KUBECTL="${KUBECTL:-kubectl}"
 NS=koral-system
 
 "$HELM" upgrade --install cpu         charts/cpu-agent          -n $NS

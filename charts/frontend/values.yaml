@@ -19,5 +19,8 @@ resources:
     memory: "128Mi"
 
 env:
-  REACT_APP_BACKEND_URL: "http://backend:8000"
-  REACT_APP_WS_URL: "ws://backend:8000/ws"
+  # Set REACT_APP_BACKEND_URL to the externally accessible backend URL
+  # (e.g., http://<minikube-ip>:30000 or your cluster's external IP).
+  # Override at deploy time: --set env.REACT_APP_BACKEND_URL=http://<host>:30000
+  REACT_APP_BACKEND_URL: "http://localhost:30000"
+  REACT_APP_WS_URL: "ws://localhost:30000/ws"

@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-MINIKUBE="/mnt/c/Program Files/Kubernetes/Minikube/minikube.exe"
-HELM="/mnt/c/Users/moham/AppData/Local/Microsoft/WinGet/Links/helm.exe"
-KUBECTL="/mnt/c/Program Files/Docker/Docker/resources/bin/kubectl.exe"
+MINIKUBE="${MINIKUBE:-minikube}"
+HELM="${HELM:-helm}"
+KUBECTL="${KUBECTL:-kubectl}"
 
 echo "==> Starting Minikube (4 CPU, 8GB RAM)..."
 "$MINIKUBE" start --cpus=4 --memory=8192

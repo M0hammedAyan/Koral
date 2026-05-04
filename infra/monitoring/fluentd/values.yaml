@@ -17,8 +17,9 @@ fileConfigs:
       tag koral.*
       read_from_head true
       <parse>
-        @type json
-        time_format %Y-%m-%dT%H:%M:%S.%NZ
+        # Use CRI parser for Kubernetes container runtime log format
+        # (containerd/CRI-O write logs in CRI format, not raw JSON)
+        @type cri
       </parse>
     </source>
 

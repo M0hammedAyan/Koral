@@ -2,7 +2,7 @@
 # KORAL System Health Check
 # Run after deploy-all.sh to validate the full system
 
-KUBECTL="/mnt/c/Program Files/Docker/Docker/resources/bin/kubectl.exe"
+KUBECTL="${KUBECTL:-kubectl}"
 NS=koral-system
 PASS=0
 FAIL=0
