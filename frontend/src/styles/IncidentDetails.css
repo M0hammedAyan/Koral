@@ -1,0 +1,139 @@
+.incident-details {
+  max-width: 1000px;
+  margin: 0 auto;
+  animation: fadeIn 0.5s ease;
+}
+
+.details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #00d4ff;
+}
+
+.details-header h1 {
+  font-size: 2rem;
+  color: #00d4ff;
+}
+
+.confidence-badge {
+  background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+  color: #fff;
+  padding: 0.75rem 1.5rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.root-cause-section {
+  margin-bottom: 2rem;
+}
+
+.root-cause-section h2 {
+  color: #00d4ff;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+}
+
+.root-cause-box {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  border: 2px solid #00d4ff;
+  border-radius: 12px;
+  padding: 2rem;
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: #e0e0e0;
+  box-shadow: 0 8px 30px rgba(0, 212, 255, 0.2);
+}
+
+.affected-pods-section {
+  margin-bottom: 2rem;
+}
+
+.affected-pods-section h3 {
+  color: #00d4ff;
+  margin-bottom: 1rem;
+}
+
+.pod-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pod-badge {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  color: #51cf66;
+}
+
+.timeline-section {
+  margin-bottom: 2rem;
+}
+
+.timeline-section h3 {
+  color: #00d4ff;
+  margin-bottom: 1.5rem;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 2rem;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #333;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 2rem;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -2.5rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #666;
+  border: 2px solid #0a0a0a;
+}
+
+.timeline-dot.active {
+  background: #00d4ff;
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
+}
+
+.timeline-content {
+  padding-left: 1rem;
+}
+
+.timeline-time {
+  font-size: 0.85rem;
+  color: #888;
+  margin-bottom: 0.25rem;
+}
+
+.timeline-text {
+  font-size: 1rem;
+  color: #e0e0e0;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 3rem;
+}

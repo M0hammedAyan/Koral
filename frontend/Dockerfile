@@ -1,10 +1,18 @@
-# Dockerfile — Frontend (stub)
-# Member 4 replaces this with the real implementation
-FROM node:20-alpine
+FROM node:18-alpine AS build
+
 WORKDIR /app
-COPY package*.json ./
-RUN npm install 2>/dev/null || true
+
+COPY package.json ./
+RUN npm install
+
 COPY . .
-RUN npm run build 2>/dev/null || true
+RUN npm run build
+
+FROM nginx:alpine
+
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 EXPOSE 3000
-CMD ["npm", "start"]
+
+CMD ["nginx", "-g", "daemon off;"]

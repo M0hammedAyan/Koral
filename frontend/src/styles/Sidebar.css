@@ -1,0 +1,40 @@
+.sidebar {
+  width: 240px;
+  background: #111;
+  border-right: 1px solid #222;
+  padding: 2rem 0;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-left: 3px solid transparent;
+}
+
+.menu-item:hover {
+  background: #1a1a1a;
+  border-left-color: #00d4ff;
+}
+
+.menu-item.active {
+  background: #1a1a1a;
+  border-left-color: #00d4ff;
+}
+
+.menu-item .icon {
+  font-size: 1.5rem;
+}
+
+.menu-item .label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.menu-item.active .label {
+  color: #00d4ff;
+}
