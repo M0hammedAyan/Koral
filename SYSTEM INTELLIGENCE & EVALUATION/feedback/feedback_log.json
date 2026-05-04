@@ -1,0 +1,37 @@
+[
+  {
+    "incident_id": "INC001",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 2.7,
+    "new_threshold": 2.9
+  },
+  {
+    "incident_id": "INC001",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 2.5,
+    "new_threshold": 2.7
+  },
+  {
+    "incident_id": "INC002",
+    "metric": "cpu",
+    "is_correct": true,
+    "old_threshold": 2.7,
+    "new_threshold": 2.6
+  },
+  {
+    "incident_id": "INC001",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 2.5,
+    "new_threshold": 2.7
+  },
+  {
+    "incident_id": "INC002",
+    "metric": "cpu",
+    "is_correct": true,
+    "old_threshold": 2.7,
+    "new_threshold": 2.6
+  }
+]

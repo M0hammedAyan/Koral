@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: log-error-py-sim
+  namespace: koral-system
+  labels:
+    app: log-error-py-sim
+    role: simulation
+spec:
+  serviceAccountName: koral-agent
+  containers:
+    - name: log-error-gen
+      image: yourdockerhub/koral-simulation:latest
+      env:
+        - name: SCENARIO
+          value: network_latency
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "64Mi"
+  restartPolicy: Never

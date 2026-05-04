@@ -1,0 +1,6 @@
+{
+  "cpu_threshold": 2.6,
+  "memory_threshold": 2.5,
+  "storage_threshold": 2.5,
+  "log_threshold": 2.5
+}

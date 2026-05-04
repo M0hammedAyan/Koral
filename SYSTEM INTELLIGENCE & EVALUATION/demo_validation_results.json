@@ -1,0 +1,13 @@
+[
+  {
+    "scenario": "io_storm",
+    "checks": {
+      "anomaly_detected": false,
+      "correlation_found": false,
+      "incident_created": false,
+      "dashboard_feed_ok": false
+    },
+    "passed": 0,
+    "total": 4
+  }
+]

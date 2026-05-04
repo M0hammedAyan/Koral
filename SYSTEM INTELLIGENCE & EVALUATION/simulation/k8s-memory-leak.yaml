@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-leak-py-sim
+  namespace: koral-system
+  labels:
+    app: memory-leak-py-sim
+    role: simulation
+spec:
+  serviceAccountName: koral-agent
+  containers:
+    - name: memory-leak
+      image: yourdockerhub/koral-simulation:latest
+      env:
+        - name: SCENARIO
+          value: memory_leak
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "700Mi"
+  restartPolicy: Never

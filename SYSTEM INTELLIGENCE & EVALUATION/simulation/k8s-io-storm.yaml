@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: io-storm-py-sim
+  namespace: koral-system
+  labels:
+    app: io-storm-py-sim
+    role: simulation
+spec:
+  serviceAccountName: koral-agent
+  containers:
+    - name: io-storm
+      image: yourdockerhub/koral-simulation:latest
+      env:
+        - name: SCENARIO
+          value: io_storm
+      volumeMounts:
+        - name: data
+          mountPath: /data
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "256Mi"
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: io-storm-pvc
+  restartPolicy: Never
