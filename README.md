@@ -375,6 +375,7 @@ kubectl get svc -n koral-system | grep prometheus
 # Verify the service name matches PROMETHEUS_URL in values.yaml
 ```
 
+
 **Permission denied errors in agent logs**
 ```bash
 kubectl get clusterrolebinding koral-agent-binding
