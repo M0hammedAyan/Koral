@@ -1,0 +1,75 @@
+[
+  {
+    "timestamp": 1, 
+    "pod": "pod-A",
+    "namespace": "koral-system", 
+    "metric": "pvc_io", 
+    "value": 10,  
+    "unit": "bytes_per_sec", 
+    "z_score": 0.2, 
+    "is_anomaly": false, 
+    "window_size": 300, 
+    "source": "storage-agent"
+},
+  {
+    "timestamp": 2, 
+    "pod": "pod-A", 
+    "namespace": "koral-system", 
+    "metric": "pvc_io", 
+    "value": 20,  
+    "unit": "bytes_per_sec", 
+    "z_score": 0.4, 
+    "is_anomaly": false, 
+    "window_size": 300, 
+    "source": "storage-agent"
+  },
+  {
+    "timestamp": 3, 
+    "pod": "pod-A", 
+    "namespace": "koral-system", 
+    "metric": "pvc_io", 
+    "value": 300, 
+    "unit": "bytes_per_sec", 
+    "z_score": 2.1, 
+    "is_anomaly": true,  
+    "window_size": 300, 
+    "source": "storage-agent"
+  },
+
+  {
+    "timestamp": 2, 
+    "pod": "pod-B", 
+    "namespace": "koral-system", 
+    "metric": "cpu", 
+    "value": 10,  
+    "unit": "percent", 
+    "z_score": 0.3, 
+    "is_anomaly": false, 
+    "window_size": 300, 
+    "source": "cpu-agent"
+  },
+  {
+    "timestamp": 3, 
+    "pod": "pod-B", 
+    "namespace": "koral-system", 
+    "metric": "cpu", 
+    "value": 20,  
+    "unit": "percent", 
+    "z_score": 0.5, 
+    "is_anomaly": false, 
+    "window_size": 300, 
+    "source": "cpu-agent"
+  },
+  {
+    "timestamp": 4, 
+    "pod": "pod-B", 
+    "namespace": "koral-system", 
+    "metric": "cpu", 
+    "value": 200, 
+    "unit": "percent", 
+    "z_score": 2.0, 
+    "is_anomaly": true,  
+    "window_size": 300, 
+    "source": "cpu-agent"
+  }
+]
