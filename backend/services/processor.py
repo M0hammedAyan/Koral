@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import httpx
@@ -307,6 +308,3 @@ def _handle_correlation_result(result: dict):
                     except Exception: pass
                 break
 
-
-# asyncio needed for create_task
-import asyncio
