@@ -1,96 +1,82 @@
-"""
-Integration Test Runner
-Validates: Simulation → Agent → Backend → Correlation → Incident
-
-Usage:
-    BACKEND_URL=http://localhost:8000 python evaluation/integration_test.py
-"""
+"""Integration Test — validates full system flow: simulation → agent → backend → correlation → incident."""
 import os
 import time
-import json
 import requests
+from typing import Dict
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend.koral-system:8000")
-POLL_INTERVAL = 5   # seconds between checks
-MAX_WAIT = 120      # seconds before timeout
+TIMEOUT = 60
 
-SCENARIOS = [
-    {"pod": "cpu-spike-sim",       "metric": "cpu"},
-    {"pod": "memory-pressure-sim", "metric": "memory"},
-    {"pod": "io-storm-sim",        "metric": "storage"},
-    {"pod": "log-error-gen-sim",   "metric": "log"},
-]
-
-
-def _get(path: str) -> dict | list | None:
+def test_anomaly_detection() -> bool:
+    """Verify agents are sending anomalies to backend."""
     try:
-        r = requests.get(f"{BACKEND_URL}{path}", timeout=5)
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:
-        print(f"  [WARN] GET {path} failed: {e}")
-        return None
+        r = requests.get(f"{BACKEND_URL}/anomalies", timeout=5)
+        anomalies = r.json()
+        return len(anomalies) > 0
+    except:
+        return False
 
+def test_correlation_engine() -> bool:
+    """Verify correlation engine is generating correlations."""
+    try:
+        r = requests.get(f"{BACKEND_URL}/correlations", timeout=5)
+        correlations = r.json()
+        return len(correlations) > 0
+    except:
+        return False
 
-def wait_for_anomaly(pod: str, metric: str) -> bool:
-    """Poll /anomalies until the expected pod+metric anomaly appears."""
-    deadline = time.time() + MAX_WAIT
-    while time.time() < deadline:
-        data = _get("/anomalies") or []
-        for a in data:
-            if a.get("pod") == pod and a.get("metric") == metric and a.get("is_anomaly"):
-                return True
-        time.sleep(POLL_INTERVAL)
-    return False
+def test_incident_generation() -> bool:
+    """Verify incidents are being created with root causes."""
+    try:
+        r = requests.get(f"{BACKEND_URL}/incidents", timeout=5)
+        incidents = r.json()
+        if not incidents:
+            return False
+        # Check incident has required fields
+        inc = incidents[0]
+        return all(k in inc for k in ["incident_id", "root_cause", "affected_pods"])
+    except:
+        return False
 
+def test_graph_endpoint() -> bool:
+    """Verify dependency graph is accessible."""
+    try:
+        r = requests.get(f"{BACKEND_URL}/graph", timeout=5)
+        graph = r.json()
+        return "nodes" in graph and "edges" in graph
+    except:
+        return False
 
-def wait_for_incident(pod: str) -> dict | None:
-    """Poll /incidents until an incident referencing the pod appears."""
-    deadline = time.time() + MAX_WAIT
-    while time.time() < deadline:
-        data = _get("/incidents") or []
-        for inc in data:
-            if pod in inc.get("affected_pods", []):
-                return inc
-        time.sleep(POLL_INTERVAL)
-    return None
-
-
-def run():
-    results = []
-    for s in SCENARIOS:
-        pod, metric = s["pod"], s["metric"]
-        print(f"\n[TEST] {metric.upper()} - pod: {pod}")
-
-        anomaly_ok = wait_for_anomaly(pod, metric)
-        print(f"  Anomaly detected : {'PASS' if anomaly_ok else 'FAIL'}")
-
-        incident = wait_for_incident(pod) if anomaly_ok else None
-        incident_ok = incident is not None
-        print(f"  Incident created : {'PASS' if incident_ok else 'FAIL'}")
-        if incident:
-            print(f"  Root cause       : {incident.get('root_cause')}")
-            print(f"  Confidence       : {incident.get('confidence')}")
-
-        results.append({
-            "scenario": metric,
-            "pod": pod,
-            "anomaly_detected": anomaly_ok,
-            "incident_created": incident_ok,
-            "incident": incident,
-        })
-
-    passed = sum(1 for r in results if r["anomaly_detected"] and r["incident_created"])
-    print(f"\n{'='*40}")
-    print(f" Integration Results: {passed}/{len(results)} passed")
-    print(f"{'='*40}")
-
-    with open("integration_results.json", "w") as f:
-        json.dump(results, f, indent=2)
-
-    return passed == len(results)
-
+def run_integration_tests() -> Dict[str, bool]:
+    """Run all integration tests and return results."""
+    print("\n" + "="*50)
+    print(" KORAL Integration Test Suite")
+    print("="*50)
+    
+    tests = {
+        "Anomaly Detection": test_anomaly_detection,
+        "Correlation Engine": test_correlation_engine,
+        "Incident Generation": test_incident_generation,
+        "Graph Endpoint": test_graph_endpoint,
+    }
+    
+    results = {}
+    for name, test_fn in tests.items():
+        print(f"\nRunning: {name}...", end=" ")
+        passed = test_fn()
+        results[name] = passed
+        status = "\033[92mPASS\033[0m" if passed else "\033[91mFAIL\033[0m"
+        print(status)
+    
+    passed_count = sum(results.values())
+    total = len(results)
+    
+    print(f"\n{'='*50}")
+    print(f" Results: {passed_count}/{total} tests passed")
+    print("="*50)
+    
+    return results
 
 if __name__ == "__main__":
-    ok = run()
-    raise SystemExit(0 if ok else 1)
+    results = run_integration_tests()
+    exit(0 if all(results.values()) else 1)

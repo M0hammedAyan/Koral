@@ -1,0 +1,152 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────
+#  KORAL — Production Docker Compose
+#  Usage:
+#    1. Copy .env.example to .env and fill in your values
+#    2. docker compose up -d
+#    3. Open http://localhost:3000
+# ─────────────────────────────────────────────────────────────────────
+
+x-agent-common: &agent-common
+  restart: unless-stopped
+  networks: [koral]
+  depends_on:
+    backend:
+      condition: service_healthy
+  environment:
+    BACKEND_URL:      http://backend:8000
+    NAMESPACE:        ${KORAL_NAMESPACE:-koral-system}
+    PROMETHEUS_URL:   ${PROMETHEUS_URL:-http://prometheus:9090}
+    Z_THRESHOLD:      ${Z_THRESHOLD:-2.5}
+    POLL_INTERVAL:    ${POLL_INTERVAL:-10}
+
+services:
+
+  # ── Correlation Engine (AI/ML RCA) ──────────────────────────────
+  correlation-engine:
+    build:
+      context: ./correlation-engine
+      dockerfile: Dockerfile
+    image: koral-correlation-engine:latest
+    container_name: koral-correlation-engine
+    restart: unless-stopped
+    networks: [koral]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── AI Engine (GPT-4o + Claude) ──────────────────────────────────
+  ai-engine:
+    build:
+      context: ./ai_engine
+      dockerfile: Dockerfile
+    image: koral-ai-engine:latest
+    container_name: koral-ai-engine
+    restart: unless-stopped
+    networks: [koral]
+    environment:
+      OPENAI_API_KEY:    ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BACKEND_URL:       http://backend:8000
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_EMAIL:       ${ALERT_EMAIL:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: koral-backend:latest
+    container_name: koral-backend
+    restart: unless-stopped
+    networks: [koral]
+    volumes:
+      - koral-data:/data
+    environment:
+      CORRELATION_ENGINE_URL: http://correlation-engine:8005
+      AI_ENGINE_URL:          http://ai-engine:8006
+      DB_PATH:                /data/koral.db
+      NAMESPACE:              ${KORAL_NAMESPACE:-koral-system}
+    depends_on:
+      correlation-engine:
+        condition: service_healthy
+      ai-engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── CPU Agent ────────────────────────────────────────────────────
+  cpu-agent:
+    build:
+      context: ./agents
+      dockerfile: cpu-agent/Dockerfile
+    image: cpu-agent:latest
+    container_name: koral-cpu-agent
+    <<: *agent-common
+
+  # ── Memory Agent ─────────────────────────────────────────────────
+  memory-agent:
+    build:
+      context: ./agents
+      dockerfile: memory-agent/Dockerfile
+    image: memory-agent:latest
+    container_name: koral-memory-agent
+    <<: *agent-common
+
+  # ── Storage Agent ────────────────────────────────────────────────
+  storage-agent:
+    build:
+      context: ./agents
+      dockerfile: storage-agent/Dockerfile
+    image: storage-agent:latest
+    container_name: koral-storage-agent
+    <<: *agent-common
+
+  # ── Log Agent ────────────────────────────────────────────────────
+  log-agent:
+    build:
+      context: ./agents
+      dockerfile: log-agent/Dockerfile
+    image: log-agent:latest
+    container_name: koral-log-agent
+    <<: *agent-common
+    environment:
+      BACKEND_URL:    http://backend:8000
+      NAMESPACE:      ${KORAL_NAMESPACE:-koral-system}
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+      FLUENTD_HOST:   ${FLUENTD_HOST:-fluentd}
+      FLUENTD_PORT:   ${FLUENTD_PORT:-9880}
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: koral-frontend:latest
+    container_name: koral-frontend
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+networks:
+  koral:
+    driver: bridge
+
+volumes:
+  koral-data:
+    driver: local

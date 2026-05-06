@@ -1,59 +1,74 @@
 .settings {
-  max-width: 800px;
+  padding: 20px 24px;
+  max-width: 760px;
   margin: 0 auto;
-  animation: fadeIn 0.5s ease;
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .settings h1 {
-  font-size: 2rem;
-  color: #00d4ff;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #00d4ff;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2a2a2a;
 }
 
 .settings-section {
   background: #1a1a1a;
   border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  padding: 2rem;
-  margin-bottom: 2rem;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
 }
 
 .settings-section h2 {
   color: #00d4ff;
-  font-size: 1.3rem;
-  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 16px;
 }
 
 .setting-item {
-  margin-bottom: 1.5rem;
+  margin-bottom: 14px;
+}
+
+.setting-item:last-child {
+  margin-bottom: 0;
 }
 
 .setting-item label {
-  display: block;
-  color: #e0e0e0;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  color: #ccc;
+  font-weight: 500;
+  font-size: 0.88rem;
   cursor: pointer;
 }
 
 .setting-item input[type="checkbox"] {
-  margin-right: 0.5rem;
-  width: 18px;
-  height: 18px;
+  margin-right: 8px;
+  width: 15px;
+  height: 15px;
   cursor: pointer;
+  accent-color: #00d4ff;
 }
 
 .setting-item input[type="number"] {
   width: 100%;
-  background: #2a2a2a;
-  border: 1px solid #444;
+  background: #111;
+  border: 1px solid #2a2a2a;
   color: #e0e0e0;
-  padding: 0.75rem;
-  border-radius: 8px;
-  font-size: 1rem;
-  margin-top: 0.5rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  margin-top: 6px;
+  transition: border-color 0.2s;
 }
 
 .setting-item input[type="number"]:focus {
@@ -63,57 +78,39 @@
 
 .setting-description {
   display: block;
-  font-size: 0.85rem;
-  color: #888;
-  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 4px;
 }
 
 .settings-actions {
   display: flex;
-  gap: 1rem;
-  justify-content: center;
+  gap: 10px;
 }
 
-.incidents-page {
-  animation: fadeIn 0.5s ease;
-}
-
-.incidents-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #00d4ff;
-}
-
-.incidents-header h1 {
-  font-size: 2rem;
-  color: #00d4ff;
-}
-
-.filter-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.filter-buttons button {
-  background: #2a2a2a;
-  color: #e0e0e0;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-weight: 600;
-  border: 1px solid #444;
-}
-
-.filter-buttons button.active {
+.btn-primary {
+  padding: 8px 20px;
   background: #00d4ff;
-  color: #0a0a0a;
-  border-color: #00d4ff;
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
-.incidents-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1.5rem;
+.btn-primary:hover { background: #00bde0; }
+
+.btn-secondary {
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid #333;
+  color: #888;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
 }
+
+.btn-secondary:hover { border-color: #00d4ff; color: #00d4ff; }

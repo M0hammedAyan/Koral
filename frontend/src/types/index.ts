@@ -1,10 +1,14 @@
 export interface Anomaly {
   timestamp: number;
   pod: string;
+  namespace: string;
   metric: string;
   value: number;
+  unit: string;
   z_score: number;
   is_anomaly: boolean;
+  window_size: number;
+  source: string;
 }
 
 export interface Correlation {
@@ -16,11 +20,20 @@ export interface Correlation {
 
 export interface Incident {
   incident_id: string;
+  timestamp: number;
+  namespace: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
   root_cause: string;
-  confidence: number;
+  summary: string;
   affected_pods: string[];
-  timestamp?: number;
-  severity?: 'Critical' | 'High' | 'Medium' | 'Low';
+  primary_metric: string;
+  confidence: number;
+  evidence_count?: number;
+  created_at?: number | string;
+  ai_explanation?: string;
+  ai_message?: string;
+  ai_action?: string;
+  ai_model?: string;
 }
 
 export interface GraphNode {

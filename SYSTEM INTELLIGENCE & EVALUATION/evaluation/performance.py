@@ -1,45 +1,42 @@
-"""Performance Optimization — caching, top-N filtering, sampling for correlation engine."""
+"""Performance Optimization Layer — caching, sampling, and latency reduction."""
 import time
-from typing import List
+from functools import lru_cache
+from typing import List, Dict
 
-TOP_N = 10                  # only correlate top anomalies
-CORRELATION_INTERVAL = 30   # seconds between correlation runs
-SAMPLE_EVERY = 3            # keep 1 in N metric samples to reduce data size
+# Cache for correlation results (pod_pair -> correlation_value)
+_correlation_cache: Dict[tuple, tuple] = {}
+_cache_ttl = 30  # seconds
 
-_last_run: float = 0.0
-_cache: dict = {}
+def filter_top_anomalies(anomalies: List[dict], limit: int = 10) -> List[dict]:
+    """Reduce correlation workload by only processing top anomalies."""
+    return sorted(anomalies, key=lambda x: abs(x.get("z_score", 0)), reverse=True)[:limit]
 
+def cache_correlation(pod_a: str, pod_b: str, correlation: float, lag: int):
+    """Store correlation result with timestamp."""
+    key = tuple(sorted([pod_a, pod_b]))
+    _correlation_cache[key] = (correlation, lag, time.time())
 
-def filter_top_anomalies(anomalies: List[dict]) -> List[dict]:
-    """Return only the TOP_N anomalies sorted by z_score descending."""
-    return sorted(anomalies, key=lambda x: x.get("z_score", 0), reverse=True)[:TOP_N]
+def get_cached_correlation(pod_a: str, pod_b: str) -> dict | None:
+    """Retrieve cached correlation if still valid."""
+    key = tuple(sorted([pod_a, pod_b]))
+    if key in _correlation_cache:
+        corr, lag, ts = _correlation_cache[key]
+        if time.time() - ts < _cache_ttl:
+            return {"correlation": corr, "lag": lag, "cached": True}
+    return None
 
+def sample_metrics(metrics: List[dict], rate: int = 2) -> List[dict]:
+    """Downsample metrics to reduce processing load (keep every Nth sample)."""
+    return metrics[::rate]
 
-def should_run_correlation() -> bool:
-    """Rate-limit correlation to once every CORRELATION_INTERVAL seconds."""
-    global _last_run
+def clear_old_cache():
+    """Remove expired cache entries."""
     now = time.time()
-    if now - _last_run >= CORRELATION_INTERVAL:
-        _last_run = now
-        return True
-    return False
+    expired = [k for k, (_, _, ts) in _correlation_cache.items() if now - ts > _cache_ttl]
+    for k in expired:
+        del _correlation_cache[k]
 
-
-def sample_metrics(metrics: List[dict]) -> List[dict]:
-    """Downsample metric list to reduce volume sent to correlation engine."""
-    return metrics[::SAMPLE_EVERY]
-
-
-def cached_result(key: str, compute_fn, *args):
-    """Simple in-memory cache; returns cached value if key exists."""
-    if key not in _cache:
-        _cache[key] = compute_fn(*args)
-    return _cache[key]
-
-
-def invalidate_cache(key: str = None):
-    """Clear one key or entire cache."""
-    if key:
-        _cache.pop(key, None)
-    else:
-        _cache.clear()
+@lru_cache(maxsize=128)
+def compute_threshold_cached(metric: str, k: float) -> float:
+    """Cached threshold computation to avoid redundant calculations."""
+    return k  # Placeholder; actual logic in adaptive_threshold.py
