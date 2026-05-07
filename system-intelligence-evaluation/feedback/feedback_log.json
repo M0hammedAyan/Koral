@@ -124,5 +124,12 @@
     "is_correct": false,
     "old_threshold": 3.0,
     "new_threshold": 3.2
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 3.2,
+    "new_threshold": 3.4
   }
 ]
