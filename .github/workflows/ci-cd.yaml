@@ -79,6 +79,9 @@ jobs:
           - name: koral-simulation
             context: ./system-intelligence-evaluation
             dockerfile: ./system-intelligence-evaluation/Dockerfile
+          - name: koral-ai-engine
+            context: ./ai_engine
+            dockerfile: ./ai_engine/Dockerfile
 
     steps:
       - uses: actions/checkout@v6.0.2
@@ -187,6 +190,7 @@ jobs:
           helm upgrade --install backend     ./charts/backend             -n "$NS" --set image.repository="$REPO/koral-backend"            --set image.tag="$TAG" --wait --timeout=120s
           helm upgrade --install frontend    ./charts/frontend            -n "$NS" --set image.repository="$REPO/koral-frontend"           --set image.tag="$TAG" --wait --timeout=120s
           helm upgrade --install correlation ./charts/correlation-engine  -n "$NS" --set image.repository="$REPO/koral-correlation-engine" --set image.tag="$TAG" --wait --timeout=120s
+          helm upgrade --install ai-engine   ./charts/ai-engine           -n "$NS" --set image.repository="$REPO/koral-ai-engine"          --set image.tag="$TAG" --wait --timeout=120s
 
       - name: Deploy skipped
         if: steps.check_kube.outputs.skip == 'true'

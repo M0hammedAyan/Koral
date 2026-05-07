@@ -103,5 +103,26 @@
     "is_correct": true,
     "old_threshold": 2.7,
     "new_threshold": 2.6
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 2.6,
+    "new_threshold": 2.8
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 2.8,
+    "new_threshold": 3.0
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 3.0,
+    "new_threshold": 3.2
   }
 ]

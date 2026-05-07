@@ -1,0 +1,5 @@
+apiVersion: v2
+name: ai-engine
+description: KORAL AI Engine - GPT-4o/Claude incident analysis
+version: 1.0.0
+appVersion: "1.0.0"
