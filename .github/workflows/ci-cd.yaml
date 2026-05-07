@@ -1,107 +1,147 @@
 name: KORAL CI/CD
 
+# ─────────────────────────────────────────────
+# Triggers
+# ─────────────────────────────────────────────
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:          # allow manual re-runs from GitHub UI
+
+# ─────────────────────────────────────────────
+# Global defaults
+# ─────────────────────────────────────────────
+defaults:
+  run:
+    shell: bash
 
 jobs:
+  # ═══════════════════════════════════════════
+  # JOB 1 — Build & Push all Docker images
+  # ═══════════════════════════════════════════
   build-and-push:
+    name: Build & Push (${{ matrix.service.name }})
     runs-on: ubuntu-latest
+
     strategy:
-      fail-fast: false
+      fail-fast: false          # one failure must NOT cancel siblings
       matrix:
         service:
           - name: cpu-agent
             context: ./agents
             dockerfile: ./agents/cpu-agent/Dockerfile
+
           - name: memory-agent
             context: ./agents
             dockerfile: ./agents/memory-agent/Dockerfile
+
           - name: storage-agent
             context: ./agents
             dockerfile: ./agents/storage-agent/Dockerfile
+
           - name: log-agent
             context: ./agents
             dockerfile: ./agents/log-agent/Dockerfile
+
           - name: koral-backend
             context: .
             dockerfile: ./backend/Dockerfile
+
           - name: koral-frontend
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
+
           - name: koral-correlation-engine
             context: ./correlation-engine
             dockerfile: ./correlation-engine/Dockerfile
+
           - name: koral-simulation
             context: ./system-intelligence-evaluation
             dockerfile: ./system-intelligence-evaluation/Dockerfile
 
     steps:
-      - name: Checkout
+      # ── 1. Checkout ──────────────────────────
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
-          submodules: false
+          fetch-depth: 1          # shallow clone — no history needed for builds
+          submodules: false        # no submodules in this repo
           persist-credentials: false
 
-      - name: Verify Docker secrets
+      # ── 2. Guard — fail early with a clear message ──
+      - name: Verify Docker Hub secrets exist
+        env:
+          U: ${{ secrets.DOCKER_USERNAME }}
+          P: ${{ secrets.DOCKER_PASSWORD }}
         run: |
-          if [ -z "${{ secrets.DOCKER_USERNAME }}" ]; then
-            echo "::error::DOCKER_USERNAME secret is missing or empty"
+          if [ -z "$U" ]; then
+            echo "::error title=Missing Secret::DOCKER_USERNAME is not set in repository secrets."
+            echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
             exit 1
           fi
-          if [ -z "${{ secrets.DOCKER_PASSWORD }}" ]; then
-            echo "::error::DOCKER_PASSWORD secret is missing or empty"
+          if [ -z "$P" ]; then
+            echo "::error title=Missing Secret::DOCKER_PASSWORD is not set in repository secrets."
             exit 1
           fi
-          echo "Secrets OK — user: ${{ secrets.DOCKER_USERNAME }}"
+          echo "✓ Secrets present for user: $U"
 
+      # ── 3. Docker login — MUST come before build/push ──
       - name: Log in to Docker Hub
         uses: docker/login-action@v3.4.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      # ── 4. Build & push ──────────────────────
       - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.service.context }}
-          file: ${{ matrix.service.dockerfile }}
-          push: ${{ github.ref == 'refs/heads/main' }}
+          context:    ${{ matrix.service.context }}
+          file:       ${{ matrix.service.dockerfile }}
+          push:       ${{ github.ref == 'refs/heads/main' }}
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ matrix.service.name }}:latest
             ${{ secrets.DOCKER_USERNAME }}/${{ matrix.service.name }}:${{ github.sha }}
 
+  # ═══════════════════════════════════════════
+  # JOB 2 — Python tests
+  # ═══════════════════════════════════════════
   test:
+    name: Python Tests
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           submodules: false
           persist-credentials: false
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install test dependencies
         run: pip install -r tests/requirements.txt
 
-      - name: Run tests
+      - name: Run pytest
         run: python -m pytest tests/ -v --tb=short
 
+  # ═══════════════════════════════════════════
+  # JOB 3 — Deploy (main branch only)
+  # ═══════════════════════════════════════════
   deploy:
+    name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: [build-and-push, test]
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -116,19 +156,19 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$HOME/.kube/config"
 
-      - name: Deploy all charts
+      - name: Deploy all Helm charts
+        env:
+          NS:   koral-system
+          TAG:  ${{ github.sha }}
+          REPO: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          NS=koral-system
-          TAG=${{ github.sha }}
-          REPO=${{ secrets.DOCKER_USERNAME }}
-
-          helm upgrade --install cpu         ./charts/cpu-agent          -n $NS --set image.repository=$REPO/cpu-agent                --set image.tag=$TAG --wait
-          helm upgrade --install memory      ./charts/memory-agent        -n $NS --set image.repository=$REPO/memory-agent              --set image.tag=$TAG --wait
-          helm upgrade --install storage     ./charts/storage-agent       -n $NS --set image.repository=$REPO/storage-agent             --set image.tag=$TAG --wait
-          helm upgrade --install logs        ./charts/log-agent           -n $NS --set image.repository=$REPO/log-agent                 --set image.tag=$TAG --wait
-          helm upgrade --install backend     ./charts/backend             -n $NS --set image.repository=$REPO/koral-backend             --set image.tag=$TAG --wait
-          helm upgrade --install frontend    ./charts/frontend            -n $NS --set image.repository=$REPO/koral-frontend            --set image.tag=$TAG --wait
-          helm upgrade --install correlation ./charts/correlation-engine  -n $NS --set image.repository=$REPO/koral-correlation-engine  --set image.tag=$TAG --wait
+          helm upgrade --install cpu         ./charts/cpu-agent          -n "$NS" --set image.repository="$REPO/cpu-agent"                --set image.tag="$TAG" --wait
+          helm upgrade --install memory      ./charts/memory-agent        -n "$NS" --set image.repository="$REPO/memory-agent"              --set image.tag="$TAG" --wait
+          helm upgrade --install storage     ./charts/storage-agent       -n "$NS" --set image.repository="$REPO/storage-agent"             --set image.tag="$TAG" --wait
+          helm upgrade --install logs        ./charts/log-agent           -n "$NS" --set image.repository="$REPO/log-agent"                 --set image.tag="$TAG" --wait
+          helm upgrade --install backend     ./charts/backend             -n "$NS" --set image.repository="$REPO/koral-backend"             --set image.tag="$TAG" --wait
+          helm upgrade --install frontend    ./charts/frontend            -n "$NS" --set image.repository="$REPO/koral-frontend"            --set image.tag="$TAG" --wait
+          helm upgrade --install correlation ./charts/correlation-engine  -n "$NS" --set image.repository="$REPO/koral-correlation-engine"  --set image.tag="$TAG" --wait
