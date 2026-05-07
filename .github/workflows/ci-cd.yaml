@@ -35,8 +35,8 @@ jobs:
             context: ./correlation-engine
             dockerfile: ./correlation-engine/Dockerfile
           - name: koral-simulation
-            context: "./SYSTEM INTELLIGENCE & EVALUATION"
-            dockerfile: "./SYSTEM INTELLIGENCE & EVALUATION/Dockerfile"
+            context: ./system-intelligence-evaluation
+            dockerfile: ./system-intelligence-evaluation/Dockerfile
 
     steps:
       - name: Checkout
