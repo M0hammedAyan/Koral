@@ -27,7 +27,7 @@ kubeconfig
 
 # Helm cache
 .helm/
-
+.env
 # Editor
 .vscode/
 .idea/
