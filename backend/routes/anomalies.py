@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from backend.websocket.manager import manager
 from backend.services.processor import process_anomaly, anomalies
 import logging
@@ -20,14 +20,16 @@ class AnomalyPayload(BaseModel):
     source: str = Field(default="", description="Source agent")
     window_size: int = Field(default=300, description="Detection window size in seconds", gt=0)
 
-    @validator('metric')
+    @field_validator('metric')
+    @classmethod
     def validate_metric(cls, v):
         allowed = ['cpu', 'memory', 'storage', 'logs', 'pvc_io', 'log_error', 'network', 'latency']
         if v not in allowed:
             logger.warning(f"Unknown metric type: {v}")
         return v
 
-    @validator('namespace')
+    @field_validator('namespace')
+    @classmethod
     def validate_namespace(cls, v):
         if not v or len(v) == 0:
             return "koral-system"

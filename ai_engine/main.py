@@ -294,7 +294,7 @@ async def send_developer_alert(incident: IncidentAnalysisRequest, explanation: s
 
     # Send email in a thread so it doesn't block the async loop
     import concurrent.futures
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
         await loop.run_in_executor(pool, _send_email, subject, html)
 
@@ -512,4 +512,5 @@ async def ai_ws(websocket: WebSocket):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        ws_clients.remove(websocket)
+        if websocket in ws_clients:
+            ws_clients.remove(websocket)

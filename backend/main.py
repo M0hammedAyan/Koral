@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from backend.routes.anomalies import router as anomalies_router
 from backend.routes.incidents import router as incidents_router
 from backend.routes.graph import router as graph_router
@@ -19,10 +20,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("KORAL Backend starting up...")
+    logger.info("Database initialized and loaded")
+    logger.info("All routes registered")
+    logger.info("Backend ready to accept connections")
+    yield
+    logger.info("KORAL Backend shutting down...")
+
+
 app = FastAPI(
     title="KORAL Backend",
     version="2.0.0",
-    description="Kubernetes Observability with Real-time AI Logic - Backend API"
+    description="Kubernetes Observability with Real-time AI Logic - Backend API",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -30,7 +43,6 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
 )
 
 app.include_router(anomalies_router)
@@ -40,19 +52,6 @@ app.include_router(correlations_router)
 app.include_router(feedback_router)
 app.include_router(ai_router)
 app.include_router(fixes_router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("KORAL Backend starting up...")
-    logger.info("Database initialized and loaded")
-    logger.info("All routes registered")
-    logger.info("Backend ready to accept connections")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("KORAL Backend shutting down...")
 
 
 @app.get("/health")

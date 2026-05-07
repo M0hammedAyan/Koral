@@ -2,6 +2,24 @@
 .DS_Store
 Thumbs.db
 
+# Environment files (contain secrets — never commit)
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database
+data/
+*.db
+
 # Minikube / Kubernetes local state
 .minikube/
 kubeconfig
