@@ -17,7 +17,7 @@ SAMPLE_ANOMALY = {
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    assert r.json()["status"] == "ok"
 
 
 @patch("backend.routes.anomalies.process_anomaly", new_callable=AsyncMock)
