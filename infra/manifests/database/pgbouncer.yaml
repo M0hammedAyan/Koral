@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: koral-system
+data:
+  pgbouncer.ini: |
+    [databases]
+    koral = host=postgres port=5432 dbname=koral user=postgres
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    auth_type = plain
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = transaction
+    max_client_conn = 500
+    default_pool_size = 25
+    reserve_pool_size = 5
+    reserve_pool_timeout = 5
+    server_reset_query = DISCARD ALL
+    server_check_delay = 30
+    stats_period = 60
+    ignore_startup_parameters = extra_float_digits
+  userlist.txt: |
+    "postgres" "koral-dev-password"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: koral-system
+  labels:
+    app: pgbouncer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pgbouncer
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6432
+              name: pgbouncer
+          env:
+            - name: DATABASES_HOST
+              value: postgres
+            - name: DATABASES_PORT
+              value: "5432"
+            - name: DATABASES_USER
+              value: postgres
+            - name: DATABASES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: DB_PASS
+            - name: DATABASES_DBNAME
+              value: koral
+            - name: POOL_MODE
+              value: transaction
+            - name: MAX_CLIENT_CONN
+              value: "500"
+            - name: DEFAULT_POOL_SIZE
+              value: "25"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pgbouncer
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: 6432
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: 6432
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: pgbouncer-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: koral-system
+spec:
+  selector:
+    app: pgbouncer
+  ports:
+    - name: pgbouncer
+      port: 6432
+      targetPort: 6432

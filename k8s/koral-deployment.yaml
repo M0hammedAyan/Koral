@@ -1,34 +1,245 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: koral-system
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: koral
+  name: backend
+  namespace: koral-system
   labels:
-    app: koral
+    app: backend
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
-      app: koral
+      app: backend
   template:
     metadata:
       labels:
-        app: koral
+        app: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
-        - name: koral
-          image: koral:v1
-          imagePullPolicy: Never
+        - name: backend
+          image: koral:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+              name: http
+          env:
+            # Database Configuration
+            - name: DB_TYPE
+              value: "postgres"
+            - name: DB_HOST
+              value: "postgres"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "koral"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: DB_PASS
+            
+            # Service URLs
+            - name: CORRELATION_ENGINE_URL
+              value: "http://correlation-engine:8005"
+            - name: AI_ENGINE_URL
+              value: "http://ai-engine:8006"
+            
+            # Authentication
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: API_KEY
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: JWT_SECRET
+            - name: ALLOWED_ORIGINS
+              value: "http://localhost:3000,http://frontend:3000"
+            
+            # Logging
+            - name: LOG_LEVEL
+              value: "INFO"
+          
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 15
+            initialDelaySeconds: 30
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: koral-system
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-engine
+  namespace: koral-system
+  labels:
+    app: ai-engine
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-engine
+  template:
+    metadata:
+      labels:
+        app: ai-engine
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: ai-engine
+          image: koral-ai-engine:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8006
+              name: http
+          env:
+            # AI Provider Keys (from Secrets)
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: ANTHROPIC_API_KEY
+            
+            # Backend & Services
+            - name: BACKEND_URL
+              value: "http://backend:8000"
+            
+            # Email Alerts
+            - name: ALERT_EMAIL
+              value: ""  # Set this in production
+            - name: SMTP_HOST
+              value: "smtp.gmail.com"
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: SMTP_USER
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: SMTP_PASS
+            
+            # Authentication
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: JWT_SECRET
+            - name: ALLOWED_ORIGINS
+              value: "http://localhost:3000,http://frontend:3000"
+          
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+          
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8006
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8006
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-engine
+  namespace: koral-system
+spec:
+  selector:
+    app: ai-engine
+  ports:
+    - port: 8006
+      targetPort: 8006
+      protocol: TCP
+      name: http
+  type: ClusterIP

@@ -4,6 +4,7 @@ Thumbs.db
 
 # Environment files (contain secrets — never commit)
 .env
+.env.production
 .env.local
 .env.*.local
 frontend/.env

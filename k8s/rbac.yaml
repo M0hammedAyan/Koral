@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: koral-backend-sa
+  namespace: koral-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: koral-backend-role
+  namespace: koral-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: koral-backend-rb
+  namespace: koral-system
+subjects:
+  - kind: ServiceAccount
+    name: koral-backend-sa
+    namespace: koral-system
+roleRef:
+  kind: Role
+  name: koral-backend-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: koral-agent-sa
+  namespace: koral-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: koral-agent-role
+  namespace: koral-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: koral-agent-rb
+  namespace: koral-system
+subjects:
+  - kind: ServiceAccount
+    name: koral-agent-sa
+    namespace: koral-system
+roleRef:
+  kind: Role
+  name: koral-agent-role
+  apiGroup: rbac.authorization.k8s.io

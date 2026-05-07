@@ -1,0 +1,159 @@
+---
+# RBAC: ServiceAccounts
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: koral-backend
+  namespace: koral-system
+  labels:
+    app.kubernetes.io/name: koral-backend
+    app.kubernetes.io/component: api
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: koral-ai-engine
+  namespace: koral-system
+  labels:
+    app.kubernetes.io/name: koral-ai-engine
+    app.kubernetes.io/component: ai
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: koral-correlation-engine
+  namespace: koral-system
+  labels:
+    app.kubernetes.io/name: koral-correlation-engine
+    app.kubernetes.io/component: correlation
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: koral-agents
+  namespace: koral-system
+  labels:
+    app.kubernetes.io/name: koral-agents
+    app.kubernetes.io/component: monitoring
+
+---
+# RBAC: Roles
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: koral-backend
+  namespace: koral-system
+rules:
+  # ConfigMaps (read-only)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  # Secrets (specific secrets only)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["koral-secrets", "koral-tls"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: koral-ai-engine
+  namespace: koral-system
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["koral-secrets"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: koral-correlation-engine
+  namespace: koral-system
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: koral-agents
+  namespace: koral-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+---
+# RBAC: RoleBindings
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: koral-backend
+  namespace: koral-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: koral-backend
+subjects:
+  - kind: ServiceAccount
+    name: koral-backend
+    namespace: koral-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: koral-ai-engine
+  namespace: koral-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: koral-ai-engine
+subjects:
+  - kind: ServiceAccount
+    name: koral-ai-engine
+    namespace: koral-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: koral-correlation-engine
+  namespace: koral-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: koral-correlation-engine
+subjects:
+  - kind: ServiceAccount
+    name: koral-correlation-engine
+    namespace: koral-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: koral-agents
+  namespace: koral-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: koral-agents
+subjects:
+  - kind: ServiceAccount
+    name: koral-agents
+    namespace: koral-system

@@ -1,0 +1,107 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: koral-system
+  labels:
+    name: koral-system
+    app.kubernetes.io/name: koral
+    environment: production
+
+---
+# Resource Quota
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: koral-quota
+  namespace: koral-system
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: "20Gi"
+    limits.cpu: "20"
+    limits.memory: "40Gi"
+    persistentvolumeclaims: "10"
+    pods: "50"
+    services: "10"
+    ingresses.networking.k8s.io: "5"
+  scopes:
+    - NotTerminating
+
+---
+# Network Policy: Namespace isolation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-namespace-isolation
+  namespace: koral-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic within koral-system namespace
+    - from:
+        - podSelector: {}
+    # Allow traffic from ingress-nginx namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+
+---
+# Pod Security Standards
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: koral-restricted
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  allowedCapabilities: []
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  seLinux:
+    rule: 'MustRunAs'
+    seLinuxOptions:
+      level: "s0:c123,c456"
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: false
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+
+---
+# Service Monitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: koral-services
+  namespace: koral-system
+  labels:
+    app.kubernetes.io/name: koral
+spec:
+  selector:
+    matchLabels:
+      prometheus.io/scrape: "true"
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

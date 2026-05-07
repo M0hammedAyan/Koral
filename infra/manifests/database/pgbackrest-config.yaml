@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pgbackrest-s3-credentials
+  namespace: koral-system
+type: Opaque
+stringData:
+  repo1-s3-key: "REPLACE_WITH_S3_ACCESS_KEY"
+  repo1-s3-key-secret: "REPLACE_WITH_S3_SECRET_KEY"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbackrest-config
+  namespace: koral-system
+data:
+  pgbackrest.conf: |
+    [global]
+    repo1-type=s3
+    repo1-path=/koral-backups
+    repo1-s3-endpoint=s3.amazonaws.com
+    repo1-s3-region=us-east-1
+    repo1-s3-bucket=REPLACE_WITH_BACKUP_BUCKET
+    repo1-s3-uri-style=host
+    repo1-retention-full=14
+    repo1-retention-diff=7
+    process-max=4
+    start-fast=y
+    archive-async=y
+    compress-type=zst
+    log-level-console=info
+
+    [koral]
+    pg1-path=/var/lib/postgresql/data
+    pg1-port=5432
+    pg1-user=postgres
+
+  backup-full.sh: |
+    #!/usr/bin/env sh
+    set -eu
+    pgbackrest --stanza=koral stanza-create || true
+    pgbackrest --stanza=koral --type=full backup
+
+  backup-diff.sh: |
+    #!/usr/bin/env sh
+    set -eu
+    pgbackrest --stanza=koral --type=diff backup
+
+  backup-info.sh: |
+    #!/usr/bin/env sh
+    set -eu
+    pgbackrest --stanza=koral info --output=json
+
+  archive-command.sh: |
+    #!/usr/bin/env sh
+    set -eu
+    exec pgbackrest --stanza=koral archive-push "$1"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-archive-settings
+  namespace: koral-system
+data:
+  archive-mode: "on"
+  archive-timeout: "60"
+  wal-level: "replica"
+  max-wal-senders: "5"
+  max-replication-slots: "5"
+  archive-command: "/etc/pgbackrest/archive-command.sh %p"

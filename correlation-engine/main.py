@@ -3,6 +3,26 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI
+from fastapi.responses import Response
+from starlette.middleware.base import BaseHTTPMiddleware
+try:
+    import prometheus_client
+    from prometheus_client import Counter, CONTENT_TYPE_LATEST
+    PROM_AVAILABLE = True
+except Exception:
+    PROM_AVAILABLE = False
+    class _DummyCounter:
+        def __init__(self, *a, **k):
+            pass
+        def inc(self):
+            pass
+    Counter = _DummyCounter
+    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
+    class _DummyProm:
+        @staticmethod
+        def generate_latest():
+            return b""
+    prometheus_client = _DummyProm()
 from pydantic import BaseModel
 from ai_core.rca import determine_root_cause, determine_severity, primary_metric
 from ai_core.anomaly import RollingZScoreDetector
@@ -10,6 +30,18 @@ from ai_core.incident import build_incident
 from ai_core.validator import validate_event, ValidationError
 
 app = FastAPI(title="KORAL Correlation Engine", version="2.0.0")
+
+# Prometheus metrics
+REQUEST_COUNT = Counter('koral_correlation_requests_total', 'Total HTTP requests to KORAL correlation engine')
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        REQUEST_COUNT.inc()
+        return await call_next(request)
+
+
+app.add_middleware(MetricsMiddleware)
 
 _detector = RollingZScoreDetector(z_threshold=3.0, window_size=300)
 
@@ -42,6 +74,12 @@ _METRIC_MAP = {"storage": "pvc_io", "logs": "log_error"}
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get('/metrics')
+def metrics():
+    data = prometheus_client.generate_latest()
+    return Response(data, media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/correlate")

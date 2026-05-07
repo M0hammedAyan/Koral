@@ -1,0 +1,66 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: koral-system
+
+bases:
+  - ../../base
+
+namePrefix: prod-
+commonLabels:
+  environment: production
+  tier: primary
+
+commonAnnotations:
+  environment: production
+  deployment-date: "2024-01-15"
+
+# Production image pulls
+images:
+  - name: ghcr.io/m0hammedayan/koral/koral-backend
+    newName: ghcr.io/m0hammedayan/koral/koral-backend
+    newTag: v1.0.0
+  - name: ghcr.io/m0hammedayan/koral/koral-ai-engine
+    newName: ghcr.io/m0hammedayan/koral/koral-ai-engine
+    newTag: v1.0.0
+  - name: ghcr.io/m0hammedayan/koral/koral-correlation-engine
+    newName: ghcr.io/m0hammedayan/koral/koral-correlation-engine
+    newTag: v1.0.0
+  - name: ghcr.io/m0hammedayan/koral/koral-frontend
+    newName: ghcr.io/m0hammedayan/koral/koral-frontend
+    newTag: v1.0.0
+
+# Production resource patches
+replicas:
+  - name: prod-koral-backend
+    count: 3
+  - name: prod-koral-ai-engine
+    count: 2
+  - name: prod-koral-correlation-engine
+    count: 2
+  - name: prod-koral-frontend
+    count: 2
+
+# Resource quotas for production namespace
+resources:
+  - resource-quota.yaml
+
+# Production-specific configurations
+configMapGenerator:
+  - name: koral-backend-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - DB_SSL_MODE=require
+
+# Production-specific patches
+patchesStrategicMerge:
+  - ingress-patch.yaml
+
+# Production network policy enforcement
+secretGenerator:
+  - name: koral-secrets
+    behavior: merge
+    envs:
+      - secrets.env

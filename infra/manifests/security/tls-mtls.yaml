@@ -1,0 +1,236 @@
+---
+# TLS Configuration for KORAL
+# Mutual TLS (mTLS) for service-to-service communication
+
+# Certificate Issuer for internal service certificates
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: koral-internal-ca
+spec:
+  ca:
+    secretRef:
+      name: koral-ca-key-pair
+
+---
+# Generate root CA certificate (manually once, then reference)
+# In production, use HashiCorp Vault or similar
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: koral-root-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: koral-root-ca
+  secretName: koral-ca-key-pair
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+
+---
+# Self-signed issuer for root CA (temporary, should be replaced)
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+
+---
+# Backend service certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: koral-backend-tls
+  namespace: koral-system
+spec:
+  secretName: koral-backend-tls
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # 30 days
+  commonName: koral-backend.koral-system.svc.cluster.local
+  dnsNames:
+    - koral-backend
+    - koral-backend.koral-system
+    - koral-backend.koral-system.svc
+    - koral-backend.koral-system.svc.cluster.local
+  issuerRef:
+    name: koral-internal-ca
+    kind: ClusterIssuer
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+
+---
+# AI Engine service certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: koral-ai-engine-tls
+  namespace: koral-system
+spec:
+  secretName: koral-ai-engine-tls
+  duration: 2160h
+  renewBefore: 720h
+  commonName: koral-ai-engine.koral-system.svc.cluster.local
+  dnsNames:
+    - koral-ai-engine
+    - koral-ai-engine.koral-system
+    - koral-ai-engine.koral-system.svc
+    - koral-ai-engine.koral-system.svc.cluster.local
+  issuerRef:
+    name: koral-internal-ca
+    kind: ClusterIssuer
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+
+---
+# Correlation Engine service certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: koral-correlation-engine-tls
+  namespace: koral-system
+spec:
+  secretName: koral-correlation-engine-tls
+  duration: 2160h
+  renewBefore: 720h
+  commonName: koral-correlation-engine.koral-system.svc.cluster.local
+  dnsNames:
+    - koral-correlation-engine
+    - koral-correlation-engine.koral-system
+    - koral-correlation-engine.koral-system.svc
+    - koral-correlation-engine.koral-system.svc.cluster.local
+  issuerRef:
+    name: koral-internal-ca
+    kind: ClusterIssuer
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+
+---
+# Client certificate for service-to-service communication
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: koral-client-tls
+  namespace: koral-system
+spec:
+  secretName: koral-client-tls
+  duration: 2160h
+  renewBefore: 720h
+  commonName: koral-client
+  issuerRef:
+    name: koral-internal-ca
+    kind: ClusterIssuer
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
+
+---
+# NetworkPolicy for mTLS enforcement
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-mtls-enforcement
+  namespace: koral-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow mTLS communication
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: koral
+      ports:
+        - protocol: TCP
+          port: 8443  # HTTPS/mTLS port
+
+---
+# Service with mTLS (requires istio or linkerd)
+# Example configuration for Istio
+apiVersion: networking.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: koral-mtls-default
+  namespace: koral-system
+spec:
+  mtls:
+    mode: STRICT  # Enforce mTLS
+
+---
+# Istio Gateway for TLS termination
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: koral-gateway
+  namespace: koral-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: koral-api-tls
+      hosts:
+        - "koral.ai"
+        - "api.koral.ai"
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "koral.ai"
+        - "api.koral.ai"
+
+---
+# Istio VirtualService with TLS
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: koral-backend
+  namespace: koral-system
+spec:
+  hosts:
+    - api.koral.ai
+  gateways:
+    - koral-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: koral-backend
+            port:
+              number: 8000
+          weight: 100
+
+---
+# Istio DestinationRule with TLS
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: koral-backend-mtls
+  namespace: koral-system
+spec:
+  host: koral-backend
+  trafficPolicy:
+    tls:
+      mode: MUTUAL
+      clientCertificate: /etc/certs/client-cert.pem
+      privateKey: /etc/certs/client-key.pem
+      caCertificates: /etc/certs/ca-cert.pem
+      sni: koral-backend.koral-system.svc.cluster.local

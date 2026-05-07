@@ -1,0 +1,131 @@
+---
+# Pod Security Standards (Kubernetes 1.25+)
+# Restricted profile for all KORAL workloads
+
+# Label koral-system namespace with restricted PSS
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: koral-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# NetworkPolicy: Enforce Pod Security Standards
+# Deny privileged containers
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-pod-security
+  namespace: koral-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic only from authorized sources
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: koral-system
+
+---
+# SecurityContext Template ConfigMap
+# Reference for all pod deployments
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pod-security-templates
+  namespace: koral-system
+data:
+  pod-security-context.yaml: |
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 3000
+      fsGroup: 2000
+      fsGroupChangePolicy: "OnRootMismatch"
+      seccompProfile:
+        type: RuntimeDefault
+      supplementalGroups:
+        - 4000
+        
+  container-security-context.yaml: |
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+        add:
+          - NET_BIND_SERVICE  # Only if needed
+          
+  resource-limits.yaml: |
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+---
+# ClusterRole for Pod Security Restricted
+# Enforce restricted PSS for critical namespaces
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pod-security-restricted
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for Pod Security Restricted
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pod-security-restricted
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pod-security-restricted
+subjects:
+  - kind: Group
+    name: system:serviceaccounts
+    apiGroup: rbac.authorization.k8s.io
+
+---
+# Validation Webhook Configuration for Pod Security
+# Reject non-compliant pods at admission time
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: restrict-privileged-containers
+spec:
+  failurePolicy: fail
+  rules:
+    - operations: ["CREATE", "UPDATE"]
+      resources:
+        - group: ""
+          resources: ["pods"]
+      scope: "Namespaced"
+  validations:
+    - expression: "!object.spec.securityContext.privileged"
+      message: "Privileged containers are not allowed"
+    - expression: "!object.spec.containers.exists(c, c.securityContext.privileged)"
+      message: "Privileged container security context not allowed"
+    - expression: "object.spec.containers.all(c, c.securityContext.allowPrivilegeEscalation == false)"
+      message: "allowPrivilegeEscalation must be false"
+    - expression: "object.spec.containers.all(c, c.securityContext.readOnlyRootFilesystem)"
+      message: "Read-only root filesystem is required"
+    - expression: "object.spec.securityContext.runAsNonRoot"
+      message: "Must run as non-root user"

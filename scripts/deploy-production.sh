@@ -1,0 +1,3 @@
+﻿#!/bin/bash
+set -e
+echo Deploying KORAL Production Stack...

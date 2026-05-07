@@ -1,0 +1,323 @@
+---
+# NetworkPolicy: Deny all ingress by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: koral-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# NetworkPolicy: Deny all egress by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: koral-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+
+---
+# NetworkPolicy: Allow DNS for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: koral-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# NetworkPolicy: Backend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-backend
+  namespace: koral-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: koral-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # From Ingress Controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+    # From other pods in koral-system
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-ai-engine
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-correlation-engine
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-agents
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow to AI Engine
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-ai-engine
+      ports:
+        - protocol: TCP
+          port: 8006
+    # Allow to Correlation Engine
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-correlation-engine
+      ports:
+        - protocol: TCP
+          port: 8005
+    # Allow to external HTTPS (for API calls, webhooks, etc.)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# NetworkPolicy: AI Engine
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-ai-engine
+  namespace: koral-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: koral-ai-engine
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # From Backend
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-backend
+      ports:
+        - protocol: TCP
+          port: 8006
+  egress:
+    # Allow to external HTTPS (OpenAI, Anthropic APIs, webhooks)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# NetworkPolicy: Correlation Engine
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-correlation-engine
+  namespace: koral-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: koral-correlation-engine
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # From Backend
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-backend
+      ports:
+        - protocol: TCP
+          port: 8005
+  egress:
+    # Allow to Prometheus
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# NetworkPolicy: Monitoring Agents
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-agents
+  namespace: koral-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: koral-agents
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # From Backend only
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-backend
+      ports:
+        - protocol: TCP
+          port: 8001
+        - protocol: TCP
+          port: 8002
+        - protocol: TCP
+          port: 8003
+        - protocol: TCP
+          port: 8004
+  egress:
+    # Allow to Kubernetes API (node/pod info)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 10250  # kubelet
+    # Allow to Backend
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# NetworkPolicy: Frontend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-frontend
+  namespace: koral-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: koral-frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # From Ingress Controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    # Allow to Backend
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Allow external HTTPS (CDN, external APIs)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# NetworkPolicy: PostgreSQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: koral-postgresql
+  namespace: koral-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    # From Backend
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: koral-backend
+      ports:
+        - protocol: TCP
+          port: 5432

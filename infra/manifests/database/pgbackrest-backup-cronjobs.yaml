@@ -1,0 +1,201 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pgbackrest-backup
+  namespace: koral-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pgbackrest-backup
+  namespace: koral-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pgbackrest-backup
+  namespace: koral-system
+subjects:
+  - kind: ServiceAccount
+    name: pgbackrest-backup
+    namespace: koral-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pgbackrest-backup
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pgbackrest-full-backup
+  namespace: koral-system
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pgbackrest-backup
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            fsGroup: 10001
+          containers:
+            - name: pgbackrest-full
+              image: ghcr.io/m0hammedayan/koral/koral-postgres-backup:v1.0.0
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "/etc/pgbackrest/backup-full.sh"]
+              env:
+                - name: PGBACKREST_REPO1_S3_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key
+                - name: PGBACKREST_REPO1_S3_KEY_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key-secret
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/pgbackrest
+                  readOnly: true
+                - name: pgdata
+                  mountPath: /var/lib/postgresql/data
+              resources:
+                requests:
+                  cpu: "200m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
+          volumes:
+            - name: config
+              configMap:
+                name: pgbackrest-config
+                defaultMode: 0555
+            - name: pgdata
+              persistentVolumeClaim:
+                claimName: postgres-pvc
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pgbackrest-diff-backup
+  namespace: koral-system
+spec:
+  schedule: "0 */2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 12
+  failedJobsHistoryLimit: 6
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pgbackrest-backup
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            fsGroup: 10001
+          containers:
+            - name: pgbackrest-diff
+              image: ghcr.io/m0hammedayan/koral/koral-postgres-backup:v1.0.0
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "/etc/pgbackrest/backup-diff.sh"]
+              env:
+                - name: PGBACKREST_REPO1_S3_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key
+                - name: PGBACKREST_REPO1_S3_KEY_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key-secret
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/pgbackrest
+                  readOnly: true
+                - name: pgdata
+                  mountPath: /var/lib/postgresql/data
+              resources:
+                requests:
+                  cpu: "200m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
+          volumes:
+            - name: config
+              configMap:
+                name: pgbackrest-config
+                defaultMode: 0555
+            - name: pgdata
+              persistentVolumeClaim:
+                claimName: postgres-pvc
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pgbackrest-backup-info
+  namespace: koral-system
+spec:
+  schedule: "15 */4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 10
+  failedJobsHistoryLimit: 4
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pgbackrest-backup
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            fsGroup: 10001
+          containers:
+            - name: pgbackrest-info
+              image: ghcr.io/m0hammedayan/koral/koral-postgres-backup:v1.0.0
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c", "/etc/pgbackrest/backup-info.sh | tee /tmp/backup-info.json"]
+              env:
+                - name: PGBACKREST_REPO1_S3_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key
+                - name: PGBACKREST_REPO1_S3_KEY_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key-secret
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/pgbackrest
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+          volumes:
+            - name: config
+              configMap:
+                name: pgbackrest-config
+                defaultMode: 0555

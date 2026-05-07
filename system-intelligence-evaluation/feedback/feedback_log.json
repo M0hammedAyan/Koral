@@ -131,5 +131,40 @@
     "is_correct": false,
     "old_threshold": 3.2,
     "new_threshold": 3.4
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 3.4,
+    "new_threshold": 3.6
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 3.6,
+    "new_threshold": 3.8
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 3.8,
+    "new_threshold": 4.0
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 4.0,
+    "new_threshold": 4.0
+  },
+  {
+    "incident_id": "INC-TEST",
+    "metric": "cpu",
+    "is_correct": false,
+    "old_threshold": 4.0,
+    "new_threshold": 4.0
   }
 ]

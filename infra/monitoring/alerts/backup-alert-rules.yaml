@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: koral-backup-alerts
+  namespace: koral-system
+spec:
+  groups:
+    - name: koral.backups
+      rules:
+        - alert: KoralBackupJobFailed
+          expr: kube_job_status_failed{namespace="koral-system", job_name=~"pgbackrest-.*"} > 0
+          for: 10m
+          labels:
+            severity: critical
+            service: backup
+          annotations:
+            summary: "KORAL backup job failed"
+            description: "A pgBackRest backup or verification job has failed in koral-system."
+
+        - alert: KoralNoRecentFullBackup
+          expr: (time() - max(kube_job_status_completion_time{namespace="koral-system", job_name=~"pgbackrest-full-backup.*"})) > 90000
+          for: 15m
+          labels:
+            severity: critical
+            service: backup
+          annotations:
+            summary: "No recent full backup"
+            description: "No successful full backup in the last 25 hours."
+
+        - alert: KoralNoRecentDiffBackup
+          expr: (time() - max(kube_job_status_completion_time{namespace="koral-system", job_name=~"pgbackrest-diff-backup.*"})) > 10800
+          for: 15m
+          labels:
+            severity: warning
+            service: backup
+          annotations:
+            summary: "No recent differential backup"
+            description: "No successful differential backup in the last 3 hours."

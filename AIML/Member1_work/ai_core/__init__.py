@@ -1,10 +1,10 @@
 """Project KORAL AI/ML validation, anomaly detection, and RCA package."""
 
-from ai_core.anomaly import RollingZScoreDetector
-from ai_core.incident import build_incident
-from ai_core.pipeline import process_events
-from ai_core.rca import determine_root_cause
-from ai_core.validator import ValidationError, validate_event, validate_events
+from .anomaly import RollingZScoreDetector
+from .incident import build_incident
+from .pipeline import process_events
+from .rca import determine_root_cause
+from .validator import ValidationError, validate_event, validate_events
 
 __all__ = [
     "RollingZScoreDetector",

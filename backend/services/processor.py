@@ -2,71 +2,16 @@ import asyncio
 import os
 import uuid
 import httpx
-import sqlite3
 import json
 from datetime import datetime, timezone
 from typing import List, Dict
+from backend.database import (
+    insert_anomaly, insert_incident, update_incident, get_incidents,
+    execute, query_all, query_one
+)
 
 CORRELATION_URL = os.getenv("CORRELATION_ENGINE_URL", "http://localhost:8005")
 AI_ENGINE_URL   = os.getenv("AI_ENGINE_URL", "http://localhost:8006")
-DB_PATH         = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "koral.db"))
-
-# ── SQLite persistence ───────────────────────────────────────────────
-def _get_db():
-    db_dir = os.path.dirname(DB_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def _init_db():
-    conn = _get_db()
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS anomalies (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp INTEGER, pod TEXT, namespace TEXT,
-            metric TEXT, value REAL, unit TEXT,
-            z_score REAL, is_anomaly INTEGER,
-            window_size INTEGER, source TEXT,
-            created_at TEXT
-        );
-        CREATE TABLE IF NOT EXISTS incidents (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            incident_id TEXT UNIQUE,
-            timestamp INTEGER, namespace TEXT,
-            severity TEXT, root_cause TEXT,
-            summary TEXT, affected_pods TEXT,
-            primary_metric TEXT, confidence REAL,
-            evidence_count INTEGER, created_at TEXT,
-            ai_explanation TEXT, ai_action TEXT,
-            ai_model TEXT
-        );
-        CREATE TABLE IF NOT EXISTS fix_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            incident_id TEXT,
-            fix_type TEXT,
-            fix_description TEXT,
-            applied_by TEXT,
-            success INTEGER,
-            error_message TEXT,
-            kubectl_command TEXT,
-            timestamp TEXT,
-            created_at TEXT,
-            FOREIGN KEY (incident_id) REFERENCES incidents(incident_id)
-        );
-        CREATE TABLE IF NOT EXISTS graph_nodes (
-            id TEXT PRIMARY KEY, label TEXT, status TEXT
-        );
-        CREATE TABLE IF NOT EXISTS graph_edges (
-            source TEXT, target TEXT,
-            PRIMARY KEY (source, target)
-        );
-    """)
-    conn.commit()
-    conn.close()
-
-_init_db()
 
 # ── In-memory cache (fast reads) ────────────────────────────────────
 anomalies: List[dict] = []
@@ -78,21 +23,30 @@ graph_data: Dict = {"nodes": [], "edges": []}
 # Load existing data from DB on startup
 def _load_from_db():
     try:
-        conn = _get_db()
-        rows = conn.execute("SELECT * FROM anomalies ORDER BY id DESC LIMIT 500").fetchall()
-        anomalies.extend([dict(r) for r in reversed(rows)])
-        rows = conn.execute("SELECT * FROM incidents ORDER BY id DESC LIMIT 200").fetchall()
-        for r in reversed(rows):
-            inc = dict(r)
-            inc["affected_pods"] = json.loads(inc.get("affected_pods") or "[]")
+        rows = get_incidents(limit=200)
+        for row in reversed(rows):
+            if isinstance(row, dict):
+                inc = dict(row)
+            else:
+                inc = {
+                    "incident_id": row.get("incident_id"),
+                    "timestamp": row.get("timestamp"),
+                    "namespace": row.get("namespace"),
+                    "severity": row.get("severity"),
+                    "root_cause": row.get("root_cause"),
+                    "summary": row.get("summary"),
+                    "affected_pods": json.loads(row.get("affected_pods") or "[]"),
+                    "primary_metric": row.get("primary_metric"),
+                    "confidence": row.get("confidence"),
+                    "evidence_count": row.get("evidence_count"),
+                    "created_at": row.get("created_at"),
+                    "ai_explanation": row.get("ai_explanation"),
+                    "ai_action": row.get("ai_action"),
+                    "ai_model": row.get("ai_model"),
+                }
+            inc["affected_pods"] = json.loads(inc.get("affected_pods") or "[]") if isinstance(inc.get("affected_pods"), str) else inc.get("affected_pods", [])
             incidents.append(inc)
-        rows = conn.execute("SELECT * FROM fix_history ORDER BY id DESC LIMIT 200").fetchall()
-        fix_history.extend([dict(r) for r in reversed(rows)])
-        nodes = conn.execute("SELECT * FROM graph_nodes").fetchall()
-        graph_data["nodes"] = [dict(n) for n in nodes]
-        edges = conn.execute("SELECT * FROM graph_edges").fetchall()
-        graph_data["edges"] = [dict(e) for e in edges]
-        conn.close()
+        print(f"[db] Loaded {len(incidents)} incidents from database")
     except Exception as e:
         print(f"[db] load error: {e}")
 
@@ -106,19 +60,22 @@ def store_fix_history(incident_id: str, fix_type: str, fix_description: str,
     """Store a fix action in the history database"""
     try:
         timestamp = datetime.now(timezone.utc).isoformat()
-        conn = _get_db()
-        conn.execute("""
+        sql = """
+            INSERT INTO fix_history
+            (incident_id, fix_type, fix_description, applied_by, success,
+             error_message, kubectl_command, timestamp, created_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """ if os.getenv("DB_TYPE") == "postgres" else """
             INSERT INTO fix_history
             (incident_id, fix_type, fix_description, applied_by, success,
              error_message, kubectl_command, timestamp, created_at)
             VALUES (?,?,?,?,?,?,?,?,?)
-        """, (
+        """
+        execute(sql, (
             incident_id, fix_type, fix_description, applied_by, int(success),
             error_message, kubectl_command, int(datetime.now(timezone.utc).timestamp()),
             timestamp
         ))
-        conn.commit()
-        conn.close()
         
         # Add to in-memory cache
         fix_entry = {
@@ -144,21 +101,12 @@ async def process_anomaly(data: dict, broadcast_fn):
 
     # Persist anomaly
     try:
-        conn = _get_db()
-        conn.execute("""
-            INSERT INTO anomalies
-            (timestamp, pod, namespace, metric, value, unit, z_score,
-             is_anomaly, window_size, source, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """, (
+        insert_anomaly(
             data.get("timestamp"), data.get("pod"), data.get("namespace", "koral-system"),
             data.get("metric"), data.get("value"), data.get("unit", ""),
             data.get("z_score"), int(data.get("is_anomaly", False)),
-            data.get("window_size", 300), data.get("source", ""),
-            datetime.now(timezone.utc).isoformat(),
-        ))
-        conn.commit()
-        conn.close()
+            data.get("window_size", 300), data.get("source", "")
+        )
     except Exception as e:
         print(f"[db] anomaly insert error: {e}")
 
@@ -243,23 +191,14 @@ def _handle_correlation_result(result: dict):
 
     # Persist incident
     try:
-        conn = _get_db()
-        conn.execute("""
-            INSERT OR IGNORE INTO incidents
-            (incident_id, timestamp, namespace, severity, root_cause,
-             summary, affected_pods, primary_metric, confidence,
-             evidence_count, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """, (
+        insert_incident(
             result.get("incident_id"), result.get("timestamp"),
             result.get("namespace", "koral-system"), result.get("severity", "medium"),
             result.get("root_cause", ""), result.get("summary", ""),
-            json.dumps(result.get("affected_pods", [])),
+            result.get("affected_pods", []),
             result.get("primary_metric", ""), result.get("confidence", 0.5),
-            result.get("evidence_count", 1), result.get("created_at"),
-        ))
-        conn.commit()
-        conn.close()
+            result.get("evidence_count", 1)
+        )
     except Exception as e:
         print(f"[db] incident insert error: {e}")
 

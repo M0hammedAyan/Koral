@@ -17,6 +17,26 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from starlette.middleware.base import BaseHTTPMiddleware
+try:
+    import prometheus_client
+    from prometheus_client import Counter, CONTENT_TYPE_LATEST
+    PROM_AVAILABLE = True
+except Exception:
+    PROM_AVAILABLE = False
+    class _DummyCounter:
+        def __init__(self, *a, **k):
+            pass
+        def inc(self):
+            pass
+    Counter = _DummyCounter
+    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
+    class _DummyProm:
+        @staticmethod
+        def generate_latest():
+            return b""
+    prometheus_client = _DummyProm()
 from pydantic import BaseModel
 
 # ── Config ───────────────────────────────────────────────────────────
@@ -41,7 +61,31 @@ else:
     OPENAI_HEADERS_EXTRA = {}
 
 app = FastAPI(title="KORAL AI Engine", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# ── CORS Configuration ───────────────────────────────────────────────
+# In production, set ALLOWED_ORIGINS env var to comma-separated list
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS if origin.strip()]
+
+app.add_middleware(
+    CORSMiddleware, 
+    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
+    allow_credentials=True,
+)
+
+# Prometheus metrics
+REQUEST_COUNT = Counter('koral_ai_requests_total', 'Total HTTP requests to KORAL AI engine')
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        REQUEST_COUNT.inc()
+        return await call_next(request)
+
+
+app.add_middleware(MetricsMiddleware)
 
 # ── In-memory activity log (persisted to SQLite via backend) ─────────
 activity_log: list[dict] = []
@@ -498,6 +542,12 @@ def health():
         "slack_alerts": bool(ALERT_WEBHOOK_URL),
         "fallback": "rule-based" if not OPENAI_API_KEY and not ANTHROPIC_API_KEY else "none",
     }
+
+
+@app.get('/metrics')
+def metrics():
+    data = prometheus_client.generate_latest()
+    return Response(data, media_type=CONTENT_TYPE_LATEST)
 
 
 # ── WebSocket for live AI activity feed ─────────────────────────────

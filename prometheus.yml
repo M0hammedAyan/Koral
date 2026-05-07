@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: koral-local
+    environment: development
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Backend API
+  - job_name: 'koral-backend'
+    static_configs:
+      - targets: ['backend:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # AI Engine
+  - job_name: 'koral-ai-engine'
+    static_configs:
+      - targets: ['ai-engine:8006']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Correlation Engine
+  - job_name: 'koral-correlation'
+    static_configs:
+      - targets: ['correlation-engine:8005']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Docker containers (via docker socket, if using docker daemon)
+  # Note: Requires special setup with cAdvisor or similar

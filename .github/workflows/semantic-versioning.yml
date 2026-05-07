@@ -1,0 +1,254 @@
+name: Semantic Version Management
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version_bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+
+jobs:
+  analyze-commits:
+    runs-on: ubuntu-latest
+    outputs:
+      version_bump: ${{ steps.analyze.outputs.bump_type }}
+      breaking_changes: ${{ steps.analyze.outputs.has_breaking }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze commits for version bump
+        id: analyze
+        if: github.event_name == 'pull_request'
+        run: |
+          # Get commits from PR
+          git fetch origin main
+          COMMITS=$(git log origin/main..HEAD --format=%B)
+          
+          # Check for breaking changes
+          if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
+            echo "bump_type=major" >> $GITHUB_OUTPUT
+            echo "has_breaking=true" >> $GITHUB_OUTPUT
+          elif echo "$COMMITS" | grep -q "^feat"; then
+            echo "bump_type=minor" >> $GITHUB_OUTPUT
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          elif echo "$COMMITS" | grep -q "^fix"; then
+            echo "bump_type=patch" >> $GITHUB_OUTPUT
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          else
+            echo "bump_type=none" >> $GITHUB_OUTPUT
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment PR with version bump analysis
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const bump = '${{ steps.analyze.outputs.version_bump }}';
+            const breaking = '${{ steps.analyze.outputs.breaking_changes }}' === 'true';
+            
+            let message = `## Version Bump Analysis\n`;
+            message += `- **Detected Bump Type**: \`${bump}\`\n`;
+            if (breaking) {
+              message += `- ⚠️ **Breaking Changes Detected**\n`;
+            }
+            message += `\nThis PR will trigger a ${bump} version bump when merged.`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+
+  validate-conventional-commits:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate conventional commits
+        run: |
+          git fetch origin main
+          COMMITS=$(git log origin/main..HEAD --format=%B)
+          
+          # Check commit message format
+          if ! echo "$COMMITS" | grep -E '^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\(.+\))?!?: .+' > /dev/null; then
+            echo "❌ Commit messages do not follow Conventional Commits format"
+            echo ""
+            echo "Required format: <type>(<scope>): <description>"
+            echo "Types: feat, fix, docs, style, refactor, perf, test, chore, ci"
+            echo "Example: feat(backend): add new incident endpoint"
+            exit 1
+          fi
+          
+          echo "✓ All commits follow Conventional Commits format"
+
+  create-release:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          # Get current version from VERSION file
+          CURRENT_VERSION=$(cat VERSION)
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Determine bump type from workflow input or commits
+          BUMP_TYPE="${{ github.event.inputs.version_bump_type }}"
+          
+          if [[ -z "$BUMP_TYPE" ]]; then
+            # Auto-detect from commits
+            git fetch origin main
+            COMMITS=$(git log origin/main..HEAD --format=%B 2>/dev/null || echo "")
+            
+            if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
+              BUMP_TYPE="major"
+            elif echo "$COMMITS" | grep -q "^feat"; then
+              BUMP_TYPE="minor"
+            elif echo "$COMMITS" | grep -q "^fix"; then
+              BUMP_TYPE="patch"
+            else
+              BUMP_TYPE="patch"
+            fi
+          fi
+          
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          
+          # Parse version
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          patch=${patch:-0}
+          
+          # Calculate new version
+          case "$BUMP_TYPE" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="$major.$minor.$patch"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $CURRENT_VERSION → $NEW_VERSION (bump: $BUMP_TYPE)"
+
+      - name: Update VERSION file
+        run: echo "${{ steps.version.outputs.version }}" > VERSION
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Commit version bump
+        run: |
+          git add VERSION
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}" || true
+
+      - name: Create release
+        if: github.event_name == 'workflow_dispatch'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.version.outputs.version }}
+          name: "Release ${{ steps.version.outputs.version }}"
+          generateReleaseNotes: true
+          draft: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  update-changelog:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate changelog entry
+        run: |
+          VERSION="${{ needs.create-release.outputs.new_version }}"
+          DATE=$(date '+%Y-%m-%d')
+          
+          # Create changelog entry
+          CHANGELOG_ENTRY="## [$VERSION] - $DATE\n\n"
+          
+          if [[ -f "CHANGELOG.md" ]]; then
+            # Insert into existing changelog
+            sed -i "4i $CHANGELOG_ENTRY" CHANGELOG.md
+          else
+            # Create new changelog
+            echo -e "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n$CHANGELOG_ENTRY" > CHANGELOG.md
+          fi
+
+      - name: Commit changelog
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for v${{ needs.create-release.outputs.new_version }}" || true
+          git push
+
+  notify-release:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack
+        if: ${{ secrets.SLACK_WEBHOOK_URL }}
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*KORAL Version Released*\nVersion: `v${{ needs.create-release.outputs.new_version }}`\nRepository: ${{ github.repository }}"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Status*: ✅ Released\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
+                  }
+                }
+              ]
+            }

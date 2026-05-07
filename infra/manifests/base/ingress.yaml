@@ -1,0 +1,170 @@
+---
+# Cert-Manager ClusterIssuer for Let's Encrypt
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@koral.ai
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+# Cert-Manager ClusterIssuer for staging (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ops@koral.ai
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+# Ingress: API
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: koral-api
+  namespace: koral-system
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "5"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: camera=(), microphone=(), geolocation=()";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.koral.ai
+      secretName: koral-api-tls
+  rules:
+    - host: api.koral.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: koral-backend
+                port:
+                  number: 8000
+
+---
+# Ingress: Frontend
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: koral-frontend
+  namespace: koral-system
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Prevent caching of assets
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Cache-Control: no-cache, no-store, must-revalidate";
+      more_set_headers "Pragma: no-cache";
+      more_set_headers "Expires: 0";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - koral.ai
+      secretName: koral-frontend-tls
+  rules:
+    - host: koral.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: koral-frontend
+                port:
+                  number: 3000
+
+---
+# Ingress: Prometheus (restricted)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: koral-prometheus
+  namespace: koral-system
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: koral-prometheus-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Prometheus Access"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - prometheus.koral.ai
+      secretName: koral-prometheus-tls
+  rules:
+    - host: prometheus.koral.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus
+                port:
+                  number: 9090
+
+---
+# Ingress: Alertmanager (restricted)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: koral-alertmanager
+  namespace: koral-system
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: koral-alertmanager-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Alertmanager Access"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - alertmanager.koral.ai
+      secretName: koral-alertmanager-tls
+  rules:
+    - host: alertmanager.koral.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: alertmanager
+                port:
+                  number: 9093

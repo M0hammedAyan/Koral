@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pgbackrest-restore-verify
+  namespace: koral-system
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            fsGroup: 10001
+          containers:
+            - name: restore-verify
+              image: ghcr.io/m0hammedayan/koral/koral-postgres-backup:v1.0.0
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  echo "Starting restore verification"
+                  mkdir -p /tmp/restore-test
+                  pgbackrest --stanza=koral --delta --type=immediate restore --pg1-path=/tmp/restore-test
+                  test -f /tmp/restore-test/PG_VERSION
+                  echo "Restore verification successful"
+              env:
+                - name: PGBACKREST_REPO1_S3_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key
+                - name: PGBACKREST_REPO1_S3_KEY_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-s3-credentials
+                      key: repo1-s3-key-secret
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/pgbackrest
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
+          volumes:
+            - name: config
+              configMap:
+                name: pgbackrest-config
+                defaultMode: 0555

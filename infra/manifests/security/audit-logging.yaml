@@ -1,0 +1,264 @@
+---
+# Kubernetes Audit Policy for KORAL
+# Logs security-relevant events for compliance and debugging
+
+apiVersion: audit.k8s.io/v1
+kind: Policy
+
+rules:
+  # Log pod exec commands at RequestResponse level
+  - level: RequestResponse
+    verbs: ["create"]
+    resources:
+      - group: ""
+        resources: ["pods/exec", "pods/attach"]
+    omitStages:
+      - RequestReceived
+
+  # Log secret access
+  - level: Metadata
+    verbs: ["get", "list"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+    omitStages:
+      - RequestReceived
+
+  # Log secret modifications
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: ""
+        resources: ["secrets"]
+    omitStages:
+      - RequestReceived
+
+  # Log RBAC changes
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: rbac.authorization.k8s.io
+        resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+    omitStages:
+      - RequestReceived
+
+  # Log network policy changes
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: networking.k8s.io
+        resources: ["networkpolicies"]
+    omitStages:
+      - RequestReceived
+
+  # Log admission webhook changes
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: admissionregistration.k8s.io
+        resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+    omitStages:
+      - RequestReceived
+
+  # Log persistent volume and claim operations
+  - level: RequestResponse
+    verbs: ["create", "delete"]
+    resources:
+      - group: ""
+        resources: ["persistentvolumes", "persistentvolumeclaims"]
+    omitStages:
+      - RequestReceived
+
+  # Log authentication attempts
+  - level: RequestResponse
+    verbs: ["create"]
+    resources:
+      - group: authentication.k8s.io
+        resources: ["tokenreviews"]
+    omitStages:
+      - RequestReceived
+
+  # Log namespace deletions
+  - level: RequestResponse
+    verbs: ["delete"]
+    resources:
+      - group: ""
+        resources: ["namespaces"]
+    omitStages:
+      - RequestReceived
+
+  # Log pod security policy changes
+  - level: RequestResponse
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: policy
+        resources: ["podsecuritypolicies"]
+    omitStages:
+      - RequestReceived
+
+  # Log KORAL namespace events at metadata level
+  - level: Metadata
+    namespaces: ["koral-system"]
+    omitStages:
+      - RequestReceived
+
+  # Default: log at metadata level
+  - level: Metadata
+    omitStages:
+      - RequestReceived
+
+  # Omit health checks
+  - level: None
+    verbs: ["get"]
+    resources:
+      - group: ""
+        resources: ["pods/log"]
+    userAgents: ["kubelet/v.*"]
+
+  # Omit system component logs
+  - level: None
+    users: ["system:kube-admin", "system:kube-controller-manager"]
+    verbs: ["get", "list"]
+---
+# ConfigMap for audit policy
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-policy
+  namespace: kube-system
+data:
+  audit-policy.yaml: |
+    apiVersion: audit.k8s.io/v1
+    kind: Policy
+    rules:
+      # Log pod exec commands
+      - level: RequestResponse
+        verbs: ["create"]
+        resources:
+          - group: ""
+            resources: ["pods/exec", "pods/attach"]
+        omitStages:
+          - RequestReceived
+
+      # Log secret access
+      - level: Metadata
+        verbs: ["get", "list"]
+        resources:
+          - group: ""
+            resources: ["secrets"]
+        omitStages:
+          - RequestReceived
+
+      # Log secret modifications
+      - level: RequestResponse
+        verbs: ["create", "update", "patch", "delete"]
+        resources:
+          - group: ""
+            resources: ["secrets"]
+        omitStages:
+          - RequestReceived
+
+      # Log RBAC changes
+      - level: RequestResponse
+        verbs: ["create", "update", "patch", "delete"]
+        resources:
+          - group: rbac.authorization.k8s.io
+            resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+        omitStages:
+          - RequestReceived
+
+      # Default: log at metadata level
+      - level: Metadata
+        omitStages:
+          - RequestReceived
+
+---
+# Service for audit log aggregation
+apiVersion: v1
+kind: Service
+metadata:
+  name: audit-logger
+  namespace: koral-system
+  labels:
+    app.kubernetes.io/name: audit-logger
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5140
+      targetPort: 5140
+      protocol: TCP
+      name: syslog
+  selector:
+    app.kubernetes.io/name: audit-logger
+---
+# Deployment for audit log aggregation (optional)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-logger
+  namespace: koral-system
+  labels:
+    app.kubernetes.io/name: audit-logger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: audit-logger
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: audit-logger
+    spec:
+      containers:
+        - name: audit-logger
+          image: fluent/fluent-bit:2.1.0
+          ports:
+            - name: syslog
+              containerPort: 5140
+              protocol: UDP
+          volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc/
+      volumes:
+        - name: config
+          configMap:
+            name: audit-logger-config
+---
+# ConfigMap for Fluent Bit audit logging
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audit-logger-config
+  namespace: koral-system
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Daemon Off
+        Flush 1
+        Log_Level info
+        Parsers_File parsers.conf
+
+    [INPUT]
+        Name syslog
+        Listen 0.0.0.0
+        Port 5140
+        Parser syslog-rfc3164
+        Tag audit
+
+    [FILTER]
+        Name modify
+        Match audit
+        Add environment production
+        Add cluster koral-system
+
+    [OUTPUT]
+        Name stdout
+        Match audit
+
+  parsers.conf: |
+    [PARSER]
+        Name syslog-rfc3164
+        Format regex
+        Regex /^(?<time>[^ ]* {1,2}[^ ]* [^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.]*)?(?:\[(?<pid>[0-9]+)\])?(?:[^\:]*\:)? *(?<message>.*)$/
+        Time_Key time
+        Time_Format %b %d %H:%M:%S
