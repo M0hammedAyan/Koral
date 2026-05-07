@@ -6,10 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  REGISTRY: docker.io
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -46,7 +42,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify secrets are set
+        run: |
+          if [ -z "${{ secrets.DOCKER_USERNAME }}" ]; then
+            echo "ERROR: DOCKER_USERNAME secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DOCKER_PASSWORD }}" ]; then
+            echo "ERROR: DOCKER_PASSWORD secret is not set"
+            exit 1
+          fi
+          echo "Secrets verified for user: ${{ secrets.DOCKER_USERNAME }}"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -70,7 +79,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -78,9 +88,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install -r tests/requirements.txt
-          pip install requests==2.31.0
+        run: pip install -r tests/requirements.txt
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
@@ -94,7 +102,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -113,11 +122,10 @@ jobs:
           TAG=${{ github.sha }}
           REPO=${{ secrets.DOCKER_USERNAME }}
 
-          for chart in cpu-agent memory-agent storage-agent log-agent; do
-            helm upgrade --install ${chart%%-*} ./charts/$chart \
-              -n $NS --set image.repository=$REPO/$chart --set image.tag=$TAG --wait
-          done
-
-          helm upgrade --install backend     ./charts/backend            -n $NS --set image.repository=$REPO/koral-backend            --set image.tag=$TAG --wait
-          helm upgrade --install frontend    ./charts/frontend           -n $NS --set image.repository=$REPO/koral-frontend           --set image.tag=$TAG --wait
-          helm upgrade --install correlation ./charts/correlation-engine -n $NS --set image.repository=$REPO/koral-correlation-engine  --set image.tag=$TAG --wait
+          helm upgrade --install cpu         ./charts/cpu-agent          -n $NS --set image.repository=$REPO/cpu-agent                  --set image.tag=$TAG --wait
+          helm upgrade --install memory      ./charts/memory-agent        -n $NS --set image.repository=$REPO/memory-agent                --set image.tag=$TAG --wait
+          helm upgrade --install storage     ./charts/storage-agent       -n $NS --set image.repository=$REPO/storage-agent               --set image.tag=$TAG --wait
+          helm upgrade --install logs        ./charts/log-agent           -n $NS --set image.repository=$REPO/log-agent                   --set image.tag=$TAG --wait
+          helm upgrade --install backend     ./charts/backend             -n $NS --set image.repository=$REPO/koral-backend               --set image.tag=$TAG --wait
+          helm upgrade --install frontend    ./charts/frontend            -n $NS --set image.repository=$REPO/koral-frontend              --set image.tag=$TAG --wait
+          helm upgrade --install correlation ./charts/correlation-engine  -n $NS --set image.repository=$REPO/koral-correlation-engine    --set image.tag=$TAG --wait
