@@ -8,50 +8,44 @@ on:
 
 env:
   REGISTRY: docker.io
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service:
           - name: cpu-agent
             context: ./agents
             dockerfile: ./agents/cpu-agent/Dockerfile
-            port: 8001
           - name: memory-agent
             context: ./agents
             dockerfile: ./agents/memory-agent/Dockerfile
-            port: 8002
           - name: storage-agent
             context: ./agents
             dockerfile: ./agents/storage-agent/Dockerfile
-            port: 8003
           - name: log-agent
             context: ./agents
             dockerfile: ./agents/log-agent/Dockerfile
-            port: 8004
           - name: koral-backend
             context: .
             dockerfile: ./backend/Dockerfile
-            port: 8000
           - name: koral-frontend
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
-            port: 3000
           - name: koral-correlation-engine
             context: ./correlation-engine
             dockerfile: ./correlation-engine/Dockerfile
-            port: 8005
           - name: koral-simulation
             context: "./SYSTEM INTELLIGENCE & EVALUATION"
             dockerfile: "./SYSTEM INTELLIGENCE & EVALUATION/Dockerfile"
-            port: 0
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -60,36 +54,35 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.service.name }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service.name }}:latest,${{ env.DOCKERHUB_USERNAME }}/${{ matrix.service.name }}:${{ github.sha }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.service.name }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.service.name }}:${{ github.sha }}
 
   test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
           pip install -r tests/requirements.txt
           pip install requests==2.31.0
 
-      - name: Run pytest (Member 3 + Member 5)
-        run: python -m pytest tests/ "SYSTEM INTELLIGENCE & EVALUATION/evaluation/edge_cases.py" -v
-
-      - name: Run Member 5 full test runner
-        run: |
-          cd "SYSTEM INTELLIGENCE & EVALUATION"
-          python run_tests.py
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
 
   deploy:
     runs-on: ubuntu-latest
@@ -99,15 +92,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v4
 
       - name: Set up Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
 
       - name: Configure kubeconfig
-        run: echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
 
       - name: Deploy all charts
         run: |
@@ -115,15 +112,11 @@ jobs:
           TAG=${{ github.sha }}
           REPO=${{ secrets.DOCKERHUB_USERNAME }}
 
-          helm upgrade --install cpu         ./charts/cpu-agent          -n $NS --set image.repository=$REPO/cpu-agent          --set image.tag=$TAG --wait
-          helm upgrade --install memory      ./charts/memory-agent        -n $NS --set image.repository=$REPO/memory-agent        --set image.tag=$TAG --wait
-          helm upgrade --install storage     ./charts/storage-agent       -n $NS --set image.repository=$REPO/storage-agent       --set image.tag=$TAG --wait
-          helm upgrade --install logs        ./charts/log-agent           -n $NS --set image.repository=$REPO/log-agent           --set image.tag=$TAG --wait
-          helm upgrade --install backend     ./charts/backend             -n $NS --set image.repository=$REPO/koral-backend       --set image.tag=$TAG --wait
-          helm upgrade --install frontend    ./charts/frontend            -n $NS --set image.repository=$REPO/koral-frontend      --set image.tag=$TAG --wait
-          helm upgrade --install correlation ./charts/correlation-engine  -n $NS --set image.repository=$REPO/koral-correlation-engine --set image.tag=$TAG --wait
+          for chart in cpu-agent memory-agent storage-agent log-agent; do
+            helm upgrade --install ${chart%%-*} ./charts/$chart \
+              -n $NS --set image.repository=$REPO/$chart --set image.tag=$TAG --wait
+          done
 
-          # Patch simulation YAMLs with real DockerHub username then apply
-          find "SYSTEM INTELLIGENCE & EVALUATION/simulation" -name "k8s-*.yaml" \
-            -exec sed -i "s|DOCKERHUB_USERNAME|$REPO|g" {} \;
-          kubectl apply -f "SYSTEM INTELLIGENCE & EVALUATION/simulation/" -n $NS 2>/dev/null || true
+          helm upgrade --install backend     ./charts/backend            -n $NS --set image.repository=$REPO/koral-backend            --set image.tag=$TAG --wait
+          helm upgrade --install frontend    ./charts/frontend           -n $NS --set image.repository=$REPO/koral-frontend           --set image.tag=$TAG --wait
+          helm upgrade --install correlation ./charts/correlation-engine -n $NS --set image.repository=$REPO/koral-correlation-engine  --set image.tag=$TAG --wait
