@@ -6,4 +6,4 @@ COPY simulation/*.py ./
 
 ENV SCENARIO=io_storm
 
-CMD python ${SCENARIO}.py
+CMD ["sh", "-c", "python ${SCENARIO}.py"]
