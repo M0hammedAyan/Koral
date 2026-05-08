@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  # Reduce noise from backend during demo
+  backend:
+    environment:
+      LOG_LEVEL: "WARN"
+
+  # Reduce noise from ai-engine
+  ai-engine:
+    environment:
+      LOG_LEVEL: "WARN"
+
+  # Add light-weight CPU spike generator (temporary)
+  sim-cpu:
+    image: alpine:3.18
+    container_name: koral-sim-cpu
+    networks: [koral]
+    command: ["sh", "-c", "echo '[sim-cpu] starting busy loop for demo'; for i in $(seq 1 4); do yes > /dev/null & done; sleep 600"]
+    restart: "no"
+
+  # Memory leak simulator using python one-liner (allocates chunks)
+  sim-memory:
+    image: python:3.11-alpine
+    container_name: koral-sim-memory
+    networks: [koral]
+    command: ["sh", "-c", "python -c \"import time; a=[]; print('[sim-memory] allocating');\n while True: a.append('x'*1024*1024); time.sleep(0.05)\""]
+    restart: "no"
+
+  # Storage anomaly: attach to postgres-data and write a large file
+  sim-storage-fill:
+    image: alpine:3.18
+    container_name: koral-sim-storage
+    networks: [koral]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    command: ["sh", "-c", "echo '[sim-storage] filling storage (5MB chunks)'; dd if=/dev/zero of=/var/lib/postgresql/data/demo_fill bs=1M count=200 || true; sleep 300"]
+    restart: "no"
+  
+  # ── Frontend override: serve prebuilt assets for clean demo
+  frontend:
+    image: nginx:alpine
+    container_name: koral-frontend
+    restart: unless-stopped
+    networks: [koral]
+    volumes:
+      - ./frontend/build:/usr/share/nginx/html:ro
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+
+

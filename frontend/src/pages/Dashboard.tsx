@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { KPICard } from '../components/KPICard';
-import { IncidentCard } from '../components/IncidentCard';
-import { AIAssistant } from '../components/AIAssistant';
 import { api, wsService } from '../services/api';
 import { Incident, Anomaly } from '../types';
 import '../styles/Dashboard.css';
@@ -14,7 +12,25 @@ interface ChartPoint {
   anomaly: boolean;
 }
 
-// ── Live clock ────────────────────────────────────────────────────────
+interface Suggestion {
+  id: string;
+  severity: 'critical' | 'high' | 'medium';
+  title: string;
+  description: string;
+  autoFixable: boolean;
+  action?: () => Promise<void>;
+}
+
+interface HistoryEntry {
+  id: string;
+  action: string;
+  actor: 'ai' | 'developer';
+  timestamp: number;
+  reason: string;
+  status: 'success' | 'failed';
+}
+
+// Live clock hook
 function useLiveClock() {
   const [time, setTime] = useState(new Date());
   useEffect(() => {
@@ -24,20 +40,80 @@ function useLiveClock() {
   return time;
 }
 
+// Format time for display
+const formatTime = (date: Date) => {
+  return date.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit',
+    hour12: false 
+  });
+};
+
+const formatTimestamp = (ts: number) => {
+  const now = Date.now();
+  const diff = Math.floor((now - ts) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  return `${Math.floor(diff / 3600)}h ago`;
+};
+
 export const Dashboard: React.FC = () => {
-  const [incidents, setIncidents]     = useState<Incident[]>([]);
-  const [anomalies, setAnomalies]     = useState<Anomaly[]>([]);
-  const [cpuData, setCpuData]         = useState<ChartPoint[]>([]);
-  const [memoryData, setMemoryData]   = useState<ChartPoint[]>([]);
-  const [storageData, setStorageData] = useState<ChartPoint[]>([]);
-  const [wsStatus, setWsStatus]       = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
-  const [lastUpdate, setLastUpdate]   = useState<Date | null>(null);
-  const [showInfo, setShowInfo]       = useState<'anomaly' | 'incident' | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const [cpuData, setCpuData] = useState<ChartPoint[]>([]);
+  const [memoryData, setMemoryData] = useState<ChartPoint[]>([]);
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const anomaliesRef = useRef<Anomaly[]>([]);
   const now = useLiveClock();
 
-  // Keep ref in sync so WebSocket handler always has latest anomalies
   useEffect(() => { anomaliesRef.current = anomalies; }, [anomalies]);
+
+  // Generate AI suggestions based on current incidents
+  const generateSuggestions = useCallback((incs: Incident[]) => {
+    const newSuggestions: Suggestion[] = [];
+
+    // Critical incidents
+    const criticalIncs = incs.filter(i => i.severity === 'critical');
+    criticalIncs.forEach((inc, idx) => {
+      newSuggestions.push({
+        id: `crit-${idx}`,
+        severity: 'critical',
+        title: inc.namespace ? `Critical: ${inc.namespace}` : 'Critical Incident',
+        description: inc.summary || `${inc.affected_pods?.[0] || 'System'} experiencing critical issue`,
+        autoFixable: false,
+      });
+    });
+
+    // High severity
+    const highIncs = incs.filter(i => i.severity === 'high');
+    highIncs.slice(0, 2).forEach((inc, idx) => {
+      newSuggestions.push({
+        id: `high-${idx}`,
+        severity: 'high',
+        title: `High: ${inc.namespace || 'Service'}`,
+        description: inc.summary || 'Elevated issue detected',
+        autoFixable: true,
+      });
+    });
+
+    // Medium issues (autofix suggested)
+    const mediumAnoms = anomalies.filter(a => a.is_anomaly && a.z_score < 3).slice(0, 1);
+    mediumAnoms.forEach((anom, idx) => {
+      newSuggestions.push({
+        id: `medium-${idx}`,
+        severity: 'medium',
+        title: `Auto-fix: ${anom.metric}`,
+        description: `${anom.metric} anomaly can be auto-corrected`,
+        autoFixable: true,
+      });
+    });
+
+    setSuggestions(newSuggestions);
+  }, [anomalies]);
 
   const buildCharts = useCallback((data: Anomaly[]) => {
     const toPoints = (metric: string): ChartPoint[] =>
@@ -53,29 +129,22 @@ export const Dashboard: React.FC = () => {
 
     setCpuData(toPoints('cpu'));
     setMemoryData(toPoints('memory'));
-    setStorageData([
-      ...data.filter(a => a?.metric === 'storage' || a?.metric === 'pvc_io').slice(-20),
-      ...data.filter(a => a?.metric === 'logs'    || a?.metric === 'log_error').slice(-20),
-    ]
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .map(a => ({
-        timestamp: a.timestamp,
-        value: parseFloat(a.value.toFixed(2)),
-        z_score: parseFloat(a.z_score.toFixed(2)),
-        anomaly: a.is_anomaly,
-      })));
   }, []);
 
-  // Initial load
   const loadData = useCallback(async () => {
-    const [inc, anoms] = await Promise.all([api.getIncidents(), api.getAnomalies()]);
-    setIncidents(inc);
-    setAnomalies(anoms);
-    buildCharts(anoms);
-    setLastUpdate(new Date());
-  }, [buildCharts]);
+    try {
+      const [inc, anoms] = await Promise.all([api.getIncidents(), api.getAnomalies()]);
+      setIncidents(inc || []);
+      setAnomalies(anoms || []);
+      buildCharts(anoms || []);
+      generateSuggestions(inc || []);
+      setLastUpdate(new Date());
+    } catch (err) {
+      console.error('Load error:', err);
+    }
+  }, [buildCharts, generateSuggestions]);
 
-  // WebSocket — drives ALL live updates, no polling needed
+  // WebSocket setup
   useEffect(() => {
     loadData();
 
@@ -106,272 +175,219 @@ export const Dashboard: React.FC = () => {
           }
           return [msg.payload, ...prev];
         });
+        generateSuggestions([msg.payload, ...incidents]);
         setLastUpdate(new Date());
       }
     });
 
-    // Fallback poll every 30s only (WebSocket handles real-time)
     const interval = setInterval(loadData, 30000);
-    return () => { clearInterval(interval); wsService.disconnect(); };
-  }, [loadData, buildCharts]);
+    return () => { 
+      clearInterval(interval); 
+      wsService.disconnect(); 
+    };
+  }, [loadData, buildCharts, generateSuggestions]);
 
   // KPIs
-  const latestCpu       = anomalies.filter(a => a?.metric === 'cpu').slice(-1)[0];
-  const latestMem       = anomalies.filter(a => a?.metric === 'memory').slice(-1)[0];
-  const totalAlerts     = anomalies.filter(a => a?.is_anomaly).length;
-  const cpuVal          = latestCpu ? parseFloat(latestCpu.value.toFixed(1)) : 0;
-  const memVal          = latestMem ? parseFloat(latestMem.value.toFixed(0)) : 0;
-  const activeAnomalies = anomalies.filter(a => a?.is_anomaly);
+  const latestCpu = anomalies.filter(a => a?.metric === 'cpu').slice(-1)[0];
+  const latestMem = anomalies.filter(a => a?.metric === 'memory').slice(-1)[0];
+  const criticalCount = incidents.filter(i => i.severity === 'critical').length;
+  const cpuVal = latestCpu ? parseFloat(latestCpu.value.toFixed(1)) : 0;
+  const memVal = latestMem ? parseFloat(latestMem.value.toFixed(0)) : 0;
 
-  const chartTooltipStyle = { backgroundColor: '#1a1a1a', border: '1px solid #333', color: '#e0e0e0' };
-
-  const AnomalyDot = (props: any) => {
-    const { cx, cy, payload } = props;
-    if (!payload?.anomaly) return null;
-    return <circle cx={cx} cy={cy} r={5} fill="#ff6b6b" stroke="#fff" strokeWidth={1} />;
-  };
-
-  const formatLastUpdate = () => {
-    if (!lastUpdate) return 'Never';
-    const diff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
-    if (diff < 5)  return 'Just now';
-    if (diff < 60) return `${diff}s ago`;
-    return `${Math.floor(diff / 60)}m ago`;
+  const handleApplySuggestion = (suggestion: Suggestion) => {
+    const entry: HistoryEntry = {
+      id: `fix-${Date.now()}`,
+      action: `Applied: ${suggestion.title}`,
+      actor: 'ai',
+      timestamp: Date.now(),
+      reason: suggestion.description,
+      status: 'success',
+    };
+    setHistory(prev => [entry, ...prev].slice(0, 20));
+    setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
   };
 
   return (
     <div className="dashboard">
-
-      {/* ── TOP BAR: live status + clock ── */}
+      {/* TOP BAR */}
       <div className="dashboard-topbar">
-        <div className="live-status">
-          <span className={`live-dot ${wsStatus}`}></span>
-          <span className="live-label">
-            {wsStatus === 'live' ? 'LIVE' : wsStatus === 'reconnecting' ? 'RECONNECTING...' : 'CONNECTING...'}
-          </span>
-          {lastUpdate && (
-            <span className="last-update">Updated {formatLastUpdate()}</span>
-          )}
-        </div>
-        <div className="live-clock">
-          {now.toLocaleTimeString()} &nbsp;·&nbsp; {now.toLocaleDateString()}
-        </div>
-      </div>
-
-      {/* ── ANOMALY BANNER ── */}
-      {activeAnomalies.length > 0 && (
-        <div className="anomaly-banner">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          <strong>{activeAnomalies.length} anomal{activeAnomalies.length > 1 ? 'ies' : 'y'} detected</strong>
-          <span className="banner-sep">—</span>
-          {activeAnomalies.slice(-3).map(a => (
-            <span key={`${a.pod}-${a.timestamp}`} className="anomaly-tag">
-              {a.pod} · {a.metric} · z={a.z_score.toFixed(2)}
+        <div className="topbar-left">
+          <div className="live-status">
+            <span className={`live-dot ${wsStatus}`}></span>
+            <span className="live-label">
+              {wsStatus === 'live' ? 'LIVE' : 'RECONNECTING...'}
             </span>
-          ))}
-          <button className="info-btn" onClick={() => setShowInfo(showInfo === 'anomaly' ? null : 'anomaly')}>
-            What is this?
-          </button>
-        </div>
-      )}
-
-      {/* ── INLINE EXPLANATION PANELS ── */}
-      {showInfo === 'anomaly' && (
-        <div className="info-panel anomaly-info">
-          <button className="info-close" onClick={() => setShowInfo(null)}>x</button>
-          <h4>What is an Anomaly?</h4>
-          <p>
-            An <strong>anomaly</strong> is when a metric (CPU, memory, storage, logs) behaves
-            significantly differently from its recent normal pattern.
-          </p>
-          <p>
-            KORAL measures this using a <strong>z-score</strong> — how many standard deviations
-            the current value is from the average of the last 30 readings.
-            A z-score above <strong>2.5</strong> means the value is unusually high or low.
-          </p>
-          <div className="info-example">
-            <span className="info-example-label">Example:</span>
-            CPU normally runs at 50%. Suddenly it hits 95%.
-            Z-score = 4.2 → flagged as anomaly → red dot appears on chart.
           </div>
-          <p className="info-note">
-            An anomaly is a <strong>signal</strong>. It does not always mean something is broken —
-            it means something unusual happened and needs attention.
-          </p>
+          <div className="clock">{formatTime(now)}</div>
         </div>
-      )}
-
-      {showInfo === 'incident' && (
-        <div className="info-panel incident-info">
-          <button className="info-close" onClick={() => setShowInfo(null)}>x</button>
-          <h4>What is an Incident?</h4>
-          <p>
-            An <strong>incident</strong> is created when the AI correlation engine analyses an anomaly
-            and determines its <strong>root cause</strong>.
-          </p>
-          <p>
-            While an anomaly just says "something is wrong", an incident says
-            <strong> what</strong> is wrong, <strong>why</strong> it happened,
-            and <strong>which pods</strong> are affected.
-          </p>
-          <div className="info-example">
-            <span className="info-example-label">Example:</span>
-            Anomaly: CPU spike on pod-A (z=4.2)<br />
-            Incident: "CPU Saturation — pod-A is consuming 98% CPU due to a runaway process.
-            Confidence: 84%. Action: check for infinite loops or scale the deployment."
-          </div>
-          <div className="info-severity">
-            <span className="sev critical">CRITICAL</span> Immediate action required — developer alerted<br />
-            <span className="sev high">HIGH</span> Needs attention soon — AI explains and recommends<br />
-            <span className="sev medium">MEDIUM</span> AI auto-handles and reports what it did<br />
-            <span className="sev low">LOW</span> Informational — monitored automatically
-          </div>
+        <div className="last-update">
+          {lastUpdate && `Updated: ${formatTime(lastUpdate)}`}
         </div>
-      )}
-
-      {/* ── KPI CARDS ── */}
-      <div className="kpi-section">
-        <KPICard title="CPU Usage"       value={cpuVal} unit="%"
-          severity={cpuVal > 80 ? 'critical' : cpuVal > 60 ? 'warning' : 'normal'}
-          trend={latestCpu?.is_anomaly ? 'up' : 'stable'} />
-        <KPICard title="Memory Usage"    value={memVal} unit=" MB"
-          severity={memVal > 400 ? 'critical' : memVal > 300 ? 'warning' : 'normal'}
-          trend={latestMem?.is_anomaly ? 'up' : 'stable'} />
-        <KPICard title="Active Incidents" value={incidents.length}
-          severity={incidents.length > 0 ? 'critical' : 'normal'} />
-        <KPICard title="Total Anomalies" value={totalAlerts}
-          severity={totalAlerts > 5 ? 'critical' : totalAlerts > 0 ? 'warning' : 'normal'}
-          trend={totalAlerts > 0 ? 'up' : 'stable'} />
       </div>
 
-      {/* ── MAIN GRID ── */}
-      <div className="content-grid">
-
-        {/* Charts */}
-        <div className="charts-section">
-
-          <div className="chart-container">
-            <div className="chart-header">
-              <h3>CPU Usage <span className="chart-unit">(%)</span>
-                {latestCpu?.is_anomaly && <span className="chart-alert-badge">ANOMALY</span>}
-              </h3>
-              <span className="chart-live-badge">LIVE</span>
+      {/* CONTENT */}
+      <div className="dashboard-content">
+        
+        {/* LEFT: MAIN MONITORING */}
+        <div className="content-left">
+          
+          {/* KPI Cards */}
+          <div className="kpi-row">
+            <div className="kpi-card">
+              <div className="kpi-label">CPU Usage</div>
+              <div className="kpi-value">
+                {cpuVal}
+                <span className="kpi-unit">%</span>
+                <span className={`kpi-status ${cpuVal > 80 ? 'critical' : cpuVal > 50 ? 'warning' : 'normal'}`}></span>
+              </div>
             </div>
-            {cpuData.length === 0
-              ? <div className="chart-empty">Waiting for data...</div>
-              : (
-                <ResponsiveContainer width="100%" height={150}>
-                  <LineChart data={cpuData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                    <XAxis dataKey="timestamp" hide />
-                    <YAxis stroke="#888" width={40} domain={[0, 100]} />
-                    <Tooltip contentStyle={chartTooltipStyle}
-                      formatter={(v: any, n: string) => [v, n === 'z_score' ? 'Z-Score' : 'CPU %']}
-                      labelFormatter={(l) => new Date(l * 1000).toLocaleTimeString()} />
-                    <Line type="monotone" dataKey="value"   stroke="#00d4ff" strokeWidth={2} dot={<AnomalyDot />} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="z_score" stroke="#444"    strokeWidth={1} strokeDasharray="4 2" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            <div className="chart-legend">
-              <span className="legend-line cpu"></span> CPU value &nbsp;&nbsp;
-              <span className="legend-line zscore"></span> Z-Score &nbsp;&nbsp;
-              <span className="legend-dot-red"></span> Anomaly point
+            <div className="kpi-card">
+              <div className="kpi-label">Memory</div>
+              <div className="kpi-value">
+                {memVal}
+                <span className="kpi-unit">%</span>
+                <span className={`kpi-status ${memVal > 80 ? 'critical' : memVal > 60 ? 'warning' : 'normal'}`}></span>
+              </div>
             </div>
-          </div>
-
-          <div className="chart-container">
-            <div className="chart-header">
-              <h3>Memory Usage <span className="chart-unit">(MB)</span>
-                {latestMem?.is_anomaly && <span className="chart-alert-badge">ANOMALY</span>}
-              </h3>
-              <span className="chart-live-badge">LIVE</span>
+            <div className="kpi-card">
+              <div className="kpi-label">Incidents</div>
+              <div className="kpi-value">
+                {incidents.length}
+                <span className={`kpi-status ${criticalCount > 0 ? 'critical' : criticalCount > 0 ? 'warning' : 'normal'}`}></span>
+              </div>
             </div>
-            {memoryData.length === 0
-              ? <div className="chart-empty">Waiting for data...</div>
-              : (
-                <ResponsiveContainer width="100%" height={150}>
-                  <LineChart data={memoryData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                    <XAxis dataKey="timestamp" hide />
-                    <YAxis stroke="#888" width={50} />
-                    <Tooltip contentStyle={chartTooltipStyle}
-                      formatter={(v: any, n: string) => [v, n === 'z_score' ? 'Z-Score' : 'Memory MB']}
-                      labelFormatter={(l) => new Date(l * 1000).toLocaleTimeString()} />
-                    <Line type="monotone" dataKey="value"   stroke="#ff6b6b" strokeWidth={2} dot={<AnomalyDot />} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="z_score" stroke="#444"    strokeWidth={1} strokeDasharray="4 2" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            <div className="chart-legend">
-              <span className="legend-line mem"></span> Memory value &nbsp;&nbsp;
-              <span className="legend-line zscore"></span> Z-Score &nbsp;&nbsp;
-              <span className="legend-dot-red"></span> Anomaly point
+            <div className="kpi-card">
+              <div className="kpi-label">Anomalies</div>
+              <div className="kpi-value">
+                {anomalies.filter(a => a.is_anomaly).length}
+                <span className="kpi-status normal"></span>
+              </div>
             </div>
           </div>
 
-          <div className="chart-container">
-            <div className="chart-header">
-              <h3>Storage / Logs <span className="chart-unit">(value)</span></h3>
-              <span className="chart-live-badge">LIVE</span>
+          {/* Incidents Section */}
+          <div className="incidents-section">
+            <div className="section-header">
+              <div>
+                <div className="section-title">Incidents</div>
+                <div className="section-meta">{incidents.length} active incidents</div>
+              </div>
             </div>
-            {storageData.length === 0
-              ? <div className="chart-empty">Waiting for data...</div>
-              : (
-                <ResponsiveContainer width="100%" height={150}>
-                  <LineChart data={storageData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                    <XAxis dataKey="timestamp" hide />
-                    <YAxis stroke="#888" width={40} />
-                    <Tooltip contentStyle={chartTooltipStyle}
-                      formatter={(v: any, n: string) => [v, n === 'z_score' ? 'Z-Score' : 'Value']}
-                      labelFormatter={(l) => new Date(l * 1000).toLocaleTimeString()} />
-                    <Line type="monotone" dataKey="value"   stroke="#51cf66" strokeWidth={2} dot={<AnomalyDot />} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="z_score" stroke="#444"    strokeWidth={1} strokeDasharray="4 2" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-          </div>
-        </div>
-
-        {/* Incident Feed */}
-        <div className="incident-feed">
-          <div className="feed-header">
-            <h3>Incidents</h3>
-            <button className="info-btn" onClick={() => setShowInfo(showInfo === 'incident' ? null : 'incident')}>
-              What is an incident?
-            </button>
-          </div>
-          <div className="feed-subtitle">
-            Updates automatically — no refresh needed
-          </div>
-          <div className="incident-list">
-            {incidents.length === 0
-              ? (
-                <div className="no-incidents">
-                  <div>No incidents yet</div>
-                  <div className="no-incidents-sub">
-                    Incidents appear here automatically when the AI detects and analyses an anomaly
-                  </div>
+            <div className="incidents-list">
+              {incidents.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-text">No incidents detected</div>
                 </div>
-              )
-              : incidents.slice(0, 15).map(inc => (
-                  <IncidentCard key={inc.incident_id} incident={inc} />
+              ) : (
+                incidents.slice(0, 8).map(inc => (
+                  <div key={inc.incident_id} className={`incident-card ${inc.severity || 'normal'}`}>
+                    <div className="incident-header">
+                      <div className="incident-title">
+                        {inc.affected_pods?.[0] || inc.namespace || 'System'}
+                      </div>
+                      <span className={`incident-badge ${inc.severity || 'normal'}`}>
+                        {inc.severity || 'normal'}
+                      </span>
+                    </div>
+                    <div className="incident-details">
+                      <span>{inc.namespace}</span>
+                      <span className="incident-time">{formatTimestamp(inc.timestamp)}</span>
+                    </div>
+                    {inc.summary && (
+                      <div className="incident-ai-snippet">{inc.summary}</div>
+                    )}
+                  </div>
                 ))
-            }
+              )}
+            </div>
+          </div>
+
+          {/* Charts */}
+          <div className="charts-section">
+            <div className="section-title" style={{ marginBottom: '1rem' }}>CPU Trend</div>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={cpuData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                <XAxis dataKey="timestamp" stroke="#cbd5e1" />
+                <YAxis stroke="#cbd5e1" />
+                <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #475569', borderRadius: '8px', color: '#e0e0e0' }} />
+                <Line type="monotone" dataKey="value" stroke="#0ea5e9" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
-        {/* AI Assistant */}
-        <div className="ai-panel">
-          <AIAssistant />
+        {/* RIGHT: SIDEBAR (AI PANEL + HISTORY) */}
+        <div className="dashboard-sidebar">
+          
+          {/* AI SUGGESTIONS PANEL */}
+          <div className="ai-panel">
+            <div className="ai-header">
+              <div className="ai-icon">AI</div>
+              <div className="ai-title">KORAL AI Panel</div>
+            </div>
+            <div className="suggestions-list">
+              {suggestions.length === 0 ? (
+                <div style={{ color: '#cbd5e1', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>
+                  All systems nominal
+                </div>
+              ) : (
+                suggestions.map(sug => (
+                  <div key={sug.id} className="suggestion-item">
+                    <div>
+                      <span className={`suggestion-severity ${sug.severity}`}></span>
+                      <strong>{sug.title}</strong>
+                    </div>
+                    <div className="suggestion-text">{sug.description}</div>
+                    {sug.autoFixable && (
+                      <div className="suggestion-action">
+                        <button 
+                          className="btn-small btn-apply"
+                          onClick={() => handleApplySuggestion(sug)}
+                        >
+                          Apply Fix
+                        </button>
+                        <button 
+                          className="btn-small btn-dismiss"
+                          onClick={() => setSuggestions(prev => prev.filter(s => s.id !== sug.id))}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* HISTORY PANEL */}
+          <div className="history-panel">
+            <div className="history-title">Fix History</div>
+            <div className="history-list">
+              {history.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-text">No fixes yet</div>
+                </div>
+              ) : (
+                history.map(entry => (
+                  <div key={entry.id} className={`history-item ${entry.actor}`}>
+                    <div className={`history-actor ${entry.actor}`}>
+                      {entry.actor === 'ai' ? 'KORAL AI' : 'DEVELOPER'}
+                    </div>
+                    <div className="history-action">{entry.action}</div>
+                    <div className="history-reason">{entry.reason}</div>
+                    <div className="history-time">{formatTimestamp(entry.timestamp)}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
       </div>
     </div>
   );
 };
+
+export default Dashboard;

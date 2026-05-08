@@ -1,36 +1,59 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
-  external_labels:
-    cluster: koral-local
-    environment: development
 
 scrape_configs:
-  # Prometheus itself
+
+  # Prometheus
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # Backend API
+  # Backend
   - job_name: 'koral-backend'
+    metrics_path: /metrics
+    scrape_interval: 10s
     static_configs:
       - targets: ['backend:8000']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
 
   # AI Engine
   - job_name: 'koral-ai-engine'
+    metrics_path: /metrics
+    scrape_interval: 10s
     static_configs:
       - targets: ['ai-engine:8006']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
 
   # Correlation Engine
   - job_name: 'koral-correlation'
+    metrics_path: /metrics
+    scrape_interval: 10s
     static_configs:
       - targets: ['correlation-engine:8005']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
 
-  # Docker containers (via docker socket, if using docker daemon)
-  # Note: Requires special setup with cAdvisor or similar
+  # CPU Agent
+  - job_name: 'cpu-agent'
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['cpu-agent:8001']
+
+  # Memory Agent
+  - job_name: 'memory-agent'
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['memory-agent:8002']
+
+  # Storage Agent
+  - job_name: 'storage-agent'
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['storage-agent:8003']
+
+  # Log Agent
+  - job_name: 'log-agent'
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['log-agent:8004']

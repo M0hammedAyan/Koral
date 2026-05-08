@@ -39,8 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy virtualenv from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy application code
-COPY backend/ .
+# Copy application code as a package
+COPY backend/ ./backend/
 COPY feedback/ ./feedback/
 COPY threshold/ ./threshold/
 
@@ -66,4 +66,4 @@ USER koral
 EXPOSE 8000
 
 # Run application with multiple workers
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
