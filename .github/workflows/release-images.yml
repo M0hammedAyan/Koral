@@ -6,6 +6,8 @@ on:
       - 'v*.*.*'
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
   REGISTRY: ghcr.io
   IMAGE_NAME_BACKEND: ${{ github.repository }}/koral-backend
   IMAGE_NAME_AI_ENGINE: ${{ github.repository }}/koral-ai-engine
