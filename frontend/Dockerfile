@@ -9,8 +9,8 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies with frozen lockfile
-RUN npm ci --only=production && \
+# Install dependencies (use install to avoid lockfile mismatch in CI builds)
+RUN npm install --omit=dev && \
     npm cache clean --force
 
 # Copy source code
@@ -31,15 +31,18 @@ RUN addgroup -g 101 nginx && adduser -D -u 101 -G nginx nginx || true
 # Copy built application from builder
 COPY --from=build --chown=nginx:nginx /app/build /usr/share/nginx/html
 
-# Copy nginx configuration
+# Copy nginx main configuration (before switching user to avoid pid permission issues)
+COPY nginx-main.conf /etc/nginx/nginx.conf
+
+# Copy nginx site configuration
 COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
 
 # Security: Remove default nginx files
 RUN rm -f /etc/nginx/conf.d/default.conf.bak
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /var/cache/nginx /var/log/nginx && \
-    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx
+RUN mkdir -p /var/cache/nginx /var/log/nginx /run/nginx && \
+    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /run/nginx
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

@@ -63,6 +63,23 @@ services:
       - "9090:9090"
     # No container-level healthcheck for Prometheus (image lacks Python/curl).
 
+  # ── Grafana for Dashboards ──────────────────────────────────────
+  grafana:
+    image: grafana/grafana:9.5.6
+    container_name: koral-grafana
+    restart: unless-stopped
+    networks: [koral]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-koral}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
   # ── Correlation Engine (AI/ML RCA) ──────────────────────────────
   correlation-engine:
     build:
@@ -163,6 +180,13 @@ services:
     image: cpu-agent:latest
     container_name: koral-cpu-agent
     <<: *agent-common
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; u=urllib.request.urlopen('http://localhost:8001/health', timeout=5); sys.exit(0 if u.getcode()==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Memory Agent ─────────────────────────────────────────────────
   memory-agent:
@@ -172,6 +196,13 @@ services:
     image: memory-agent:latest
     container_name: koral-memory-agent
     <<: *agent-common
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; u=urllib.request.urlopen('http://localhost:8002/health', timeout=5); sys.exit(0 if u.getcode()==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Storage Agent ────────────────────────────────────────────────
   storage-agent:
@@ -181,6 +212,13 @@ services:
     image: storage-agent:latest
     container_name: koral-storage-agent
     <<: *agent-common
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; u=urllib.request.urlopen('http://localhost:8003/health', timeout=5); sys.exit(0 if u.getcode()==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Log Agent ────────────────────────────────────────────────────
   log-agent:
@@ -197,6 +235,13 @@ services:
       FLUENTD_HOST:   ${FLUENTD_HOST:-fluentd}
       FLUENTD_PORT:   ${FLUENTD_PORT:-9880}
       API_KEY:        ${API_KEY:-dev-api-key}
+    ports:
+      - "8004:8004"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; u=urllib.request.urlopen('http://localhost:8004/health', timeout=5); sys.exit(0 if u.getcode()==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ── Frontend ─────────────────────────────────────────────────────
   frontend:

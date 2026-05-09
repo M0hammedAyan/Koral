@@ -39,6 +39,11 @@ jobs:
       SMTP_USER: test@test.com
       SMTP_PASS: testpass
       ALLOWED_ORIGINS: http://localhost:3000
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/agents
+      BACKEND_URL: http://localhost:8000
+      PROMETHEUS_URL: http://localhost:9090
+      Z_THRESHOLD: 2.5
+      POLL_INTERVAL: 10
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -48,12 +53,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r tests/requirements.txt
+          pip install -r backend/requirements.txt
+          pip install -r agents/requirements.txt
+          pip install -r agents/cpu-agent/requirements.txt
+          pip install -r agents/memory-agent/requirements.txt
+          pip install -r agents/storage-agent/requirements.txt
+          pip install -r agents/log-agent/requirements.txt
+          pip install -r correlation-engine/requirements.txt
           pip install -r ai_engine/requirements.txt
+          pip install -r tests/requirements.txt
       - name: Run tests
         run: |
-          python -m pytest tests/ -v
+          export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/agents"
+          python -m pytest tests/ -v --tb=short
       - name: Build Docker images (for validation)
         uses: docker/build-push-action@v5
         with:

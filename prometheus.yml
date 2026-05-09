@@ -3,57 +3,34 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-
-  # Prometheus
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # Backend
   - job_name: 'koral-backend'
-    metrics_path: /metrics
-    scrape_interval: 10s
     static_configs:
       - targets: ['backend:8000']
 
-  # AI Engine
   - job_name: 'koral-ai-engine'
-    metrics_path: /metrics
-    scrape_interval: 10s
     static_configs:
       - targets: ['ai-engine:8006']
 
-  # Correlation Engine
   - job_name: 'koral-correlation'
-    metrics_path: /metrics
-    scrape_interval: 10s
     static_configs:
       - targets: ['correlation-engine:8005']
 
-  # CPU Agent
   - job_name: 'cpu-agent'
-    metrics_path: /metrics
-    scrape_interval: 10s
     static_configs:
       - targets: ['cpu-agent:8001']
 
-  # Memory Agent
   - job_name: 'memory-agent'
-    metrics_path: /metrics
-    scrape_interval: 10s
     static_configs:
       - targets: ['memory-agent:8002']
 
-  # Storage Agent
   - job_name: 'storage-agent'
-    metrics_path: /metrics
-    scrape_interval: 10s
     static_configs:
       - targets: ['storage-agent:8003']
 
-  # Log Agent
   - job_name: 'log-agent'
-    metrics_path: /metrics
-    scrape_interval: 10s
     static_configs:
       - targets: ['log-agent:8004']

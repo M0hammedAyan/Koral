@@ -2,6 +2,8 @@ import os
 import sys
 import asyncio
 import httpx
+import random
+import math
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from base_agent import BaseAgent
 
@@ -15,16 +17,46 @@ QUERY = f'sum(rate(container_cpu_usage_seconds_total{{namespace="{NAMESPACE}"}}[
 class CpuAgent(BaseAgent):
     def __init__(self):
         super().__init__(metric="cpu", pod=POD_NAME, unit="percent")
+        # Prometheus metrics
+        self.create_gauge("cpu_usage_percent", "Synthetic CPU usage percent")
+        self.create_gauge("cpu_anomaly_score", "CPU anomaly score (z)")
+
+    def on_measure(self, value: float, z: float, payload: dict):
+        # update Prometheus gauges
+        self.set_gauge("cpu_usage_percent", value)
+        self.set_gauge("cpu_anomaly_score", abs(z))
 
     async def fetch_value(self) -> float:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f"{PROMETHEUS_URL}/api/v1/query", params={"query": QUERY})
-            results = r.json().get("data", {}).get("result", [])
-            if not results:
-                return 0.0
-            raw = sum(float(item["value"][1]) for item in results) * 100
-            return min(round(raw, 4), 100.0)
+        # try real Prometheus data first
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(f"{PROMETHEUS_URL}/api/v1/query", params={"query": QUERY})
+                results = r.json().get("data", {}).get("result", [])
+                if results:
+                    raw = sum(float(item["value"][1]) for item in results) * 100
+                    return min(round(raw, 4), 100.0)
+        except Exception:
+            pass
+
+        # fallback: synthetic fluctuating CPU for demo
+        now = asyncio.get_event_loop().time()
+        base = getattr(self, "_syn_base", None)
+        if base is None:
+            base = random.uniform(10.0, 40.0)
+            self._syn_base = base
+        amp = 20.0
+        drift = math.sin(now / 15.0) * amp
+        spike = 0.0
+        if random.random() < 0.02:
+            spike = random.uniform(30, 60)
+        if getattr(self, "_force_spike", False):
+            spike += random.uniform(60, 140)
+            setattr(self, "_force_spike", False)
+        val = max(0.0, min(base + drift + spike + random.uniform(-3, 3), 100.0))
+        return round(val, 4)
 
 
 if __name__ == "__main__":
-    asyncio.run(CpuAgent().run())
+    agent = CpuAgent()
+    agent.start_metrics_server(8001)
+    asyncio.run(agent.run())

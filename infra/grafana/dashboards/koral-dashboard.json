@@ -1,0 +1,51 @@
+{
+  "uid": "koral-dashboard",
+  "title": "KORAL Agents Overview",
+  "schemaVersion": 30,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "CPU Usage (%)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 6 },
+      "targets": [ { "expr": "cpu_usage_percent", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage (%)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 6 },
+      "targets": [ { "expr": "memory_usage_percent", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Disk I/O Rate",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
+      "targets": [ { "expr": "disk_io_rate", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Log Error Rate",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 6 },
+      "targets": [ { "expr": "log_error_rate", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "CPU Anomaly Score (latest)",
+      "gridPos": { "x": 0, "y": 12, "w": 6, "h": 4 },
+      "targets": [ { "expr": "cpu_anomaly_score", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Memory Anomaly Score (latest)",
+      "gridPos": { "x": 6, "y": 12, "w": 6, "h": 4 },
+      "targets": [ { "expr": "memory_anomaly_score", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Log Anomaly Count (latest)",
+      "gridPos": { "x": 12, "y": 12, "w": 6, "h": 4 },
+      "targets": [ { "expr": "log_anomaly_count", "refId": "A" } ]
+    }
+  ],
+  "time": { "from": "now-1h", "to": "now" }
+}
