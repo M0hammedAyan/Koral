@@ -28,8 +28,11 @@ from backend.routes.correlations import router as correlations_router
 from backend.routes.feedback import router as feedback_router
 from backend.routes.ai import router as ai_router
 from backend.routes.fixes import router as fixes_router
+from backend.routes.remediation import router as remediation_router
 from backend.websocket.manager import manager
 from backend.auth import get_allowed_origins, validate_api_key
+from backend.database import init_db
+from backend.database_remediation import init_remediation_db
 import logging
 import sys
 
@@ -45,7 +48,17 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("KORAL Backend starting up...")
-    logger.info("Database initialized and loaded")
+    try:
+        init_db()
+        logger.info("Database initialized and loaded")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}", exc_info=True)
+    # Non-breaking: initialize remediation tables (no effect unless remediation enabled)
+    try:
+        init_remediation_db()
+        logger.info("Remediation tables initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize remediation tables: {e}")
     logger.info("All routes registered")
     logger.info("Backend ready to accept connections")
     yield
@@ -86,6 +99,7 @@ app.include_router(correlations_router)
 app.include_router(feedback_router)
 app.include_router(ai_router)
 app.include_router(fixes_router)
+app.include_router(remediation_router)
 
 
 @app.get("/health")

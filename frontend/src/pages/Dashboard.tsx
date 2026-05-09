@@ -1,33 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { KPICard } from '../components/KPICard';
 import { api, wsService } from '../services/api';
 import { Incident, Anomaly } from '../types';
-import '../styles/Dashboard.css';
+import { AIAssistant } from '../components/AIAssistant';
+import '../styles/Dashboard.enterprise.css';
 
 interface ChartPoint {
   timestamp: number;
   value: number;
   z_score: number;
   anomaly: boolean;
-}
-
-interface Suggestion {
-  id: string;
-  severity: 'critical' | 'high' | 'medium';
-  title: string;
-  description: string;
-  autoFixable: boolean;
-  action?: () => Promise<void>;
-}
-
-interface HistoryEntry {
-  id: string;
-  action: string;
-  actor: 'ai' | 'developer';
-  timestamp: number;
-  reason: string;
-  status: 'success' | 'failed';
 }
 
 // Live clock hook
@@ -40,7 +22,6 @@ function useLiveClock() {
   return time;
 }
 
-// Format time for display
 const formatTime = (date: Date) => {
   return date.toLocaleTimeString('en-US', { 
     hour: '2-digit', 
@@ -63,57 +44,10 @@ export const Dashboard: React.FC = () => {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [cpuData, setCpuData] = useState<ChartPoint[]>([]);
   const [memoryData, setMemoryData] = useState<ChartPoint[]>([]);
+  const [storageData, setStorageData] = useState<ChartPoint[]>([]);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const anomaliesRef = useRef<Anomaly[]>([]);
   const now = useLiveClock();
-
-  useEffect(() => { anomaliesRef.current = anomalies; }, [anomalies]);
-
-  // Generate AI suggestions based on current incidents
-  const generateSuggestions = useCallback((incs: Incident[]) => {
-    const newSuggestions: Suggestion[] = [];
-
-    // Critical incidents
-    const criticalIncs = incs.filter(i => i.severity === 'critical');
-    criticalIncs.forEach((inc, idx) => {
-      newSuggestions.push({
-        id: `crit-${idx}`,
-        severity: 'critical',
-        title: inc.namespace ? `Critical: ${inc.namespace}` : 'Critical Incident',
-        description: inc.summary || `${inc.affected_pods?.[0] || 'System'} experiencing critical issue`,
-        autoFixable: false,
-      });
-    });
-
-    // High severity
-    const highIncs = incs.filter(i => i.severity === 'high');
-    highIncs.slice(0, 2).forEach((inc, idx) => {
-      newSuggestions.push({
-        id: `high-${idx}`,
-        severity: 'high',
-        title: `High: ${inc.namespace || 'Service'}`,
-        description: inc.summary || 'Elevated issue detected',
-        autoFixable: true,
-      });
-    });
-
-    // Medium issues (autofix suggested)
-    const mediumAnoms = anomalies.filter(a => a.is_anomaly && a.z_score < 3).slice(0, 1);
-    mediumAnoms.forEach((anom, idx) => {
-      newSuggestions.push({
-        id: `medium-${idx}`,
-        severity: 'medium',
-        title: `Auto-fix: ${anom.metric}`,
-        description: `${anom.metric} anomaly can be auto-corrected`,
-        autoFixable: true,
-      });
-    });
-
-    setSuggestions(newSuggestions);
-  }, [anomalies]);
 
   const buildCharts = useCallback((data: Anomaly[]) => {
     const toPoints = (metric: string): ChartPoint[] =>
@@ -129,6 +63,7 @@ export const Dashboard: React.FC = () => {
 
     setCpuData(toPoints('cpu'));
     setMemoryData(toPoints('memory'));
+    setStorageData(toPoints('storage'));
   }, []);
 
   const loadData = useCallback(async () => {
@@ -137,14 +72,12 @@ export const Dashboard: React.FC = () => {
       setIncidents(inc || []);
       setAnomalies(anoms || []);
       buildCharts(anoms || []);
-      generateSuggestions(inc || []);
       setLastUpdate(new Date());
     } catch (err) {
       console.error('Load error:', err);
     }
-  }, [buildCharts, generateSuggestions]);
+  }, [buildCharts]);
 
-  // WebSocket setup
   useEffect(() => {
     loadData();
 
@@ -175,7 +108,6 @@ export const Dashboard: React.FC = () => {
           }
           return [msg.payload, ...prev];
         });
-        generateSuggestions([msg.payload, ...incidents]);
         setLastUpdate(new Date());
       }
     });
@@ -185,199 +117,141 @@ export const Dashboard: React.FC = () => {
       clearInterval(interval); 
       wsService.disconnect(); 
     };
-  }, [loadData, buildCharts, generateSuggestions]);
+  }, [loadData, buildCharts]);
 
-  // KPIs
   const latestCpu = anomalies.filter(a => a?.metric === 'cpu').slice(-1)[0];
   const latestMem = anomalies.filter(a => a?.metric === 'memory').slice(-1)[0];
-  const criticalCount = incidents.filter(i => i.severity === 'critical').length;
+  const latestStor = anomalies.filter(a => a?.metric === 'storage').slice(-1)[0];
   const cpuVal = latestCpu ? parseFloat(latestCpu.value.toFixed(1)) : 0;
   const memVal = latestMem ? parseFloat(latestMem.value.toFixed(0)) : 0;
+  const storVal = latestStor ? parseFloat(latestStor.value.toFixed(0)) : 0;
 
-  const handleApplySuggestion = (suggestion: Suggestion) => {
-    const entry: HistoryEntry = {
-      id: `fix-${Date.now()}`,
-      action: `Applied: ${suggestion.title}`,
-      actor: 'ai',
-      timestamp: Date.now(),
-      reason: suggestion.description,
-      status: 'success',
-    };
-    setHistory(prev => [entry, ...prev].slice(0, 20));
-    setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+  const severityColor = (sev: string) => {
+    switch (sev) {
+      case 'critical': return '#ef4444';
+      case 'high': return '#f97316';
+      case 'medium': return '#eab308';
+      default: return '#10b981';
+    }
   };
 
   return (
-    <div className="dashboard">
+    <div className="dashboard-enterprise">
       {/* TOP BAR */}
-      <div className="dashboard-topbar">
+      <div className="dashboard-topbar-enterprise">
         <div className="topbar-left">
           <div className="live-status">
             <span className={`live-dot ${wsStatus}`}></span>
             <span className="live-label">
-              {wsStatus === 'live' ? 'LIVE' : 'RECONNECTING...'}
+              {wsStatus === 'live' ? 'LIVE' : 'RECONNECTING'}
             </span>
           </div>
-          <div className="clock">{formatTime(now)}</div>
-        </div>
-        <div className="last-update">
-          {lastUpdate && `Updated: ${formatTime(lastUpdate)}`}
+          <span className="topbar-divider">|</span>
+          <div className="clock-display">{formatTime(now)}</div>
+          {lastUpdate && (
+            <>
+              <span className="topbar-divider">|</span>
+              <div className="last-update-display">Updated: {formatTime(lastUpdate)}</div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div className="dashboard-content">
-        
-        {/* LEFT: MAIN MONITORING */}
-        <div className="content-left">
-          
-          {/* KPI Cards */}
-          <div className="kpi-row">
-            <div className="kpi-card">
-              <div className="kpi-label">CPU Usage</div>
-              <div className="kpi-value">
-                {cpuVal}
-                <span className="kpi-unit">%</span>
-                <span className={`kpi-status ${cpuVal > 80 ? 'critical' : cpuVal > 50 ? 'warning' : 'normal'}`}></span>
+      <div className="dashboard-container-enterprise">
+        {/* LEFT: CHARTS AND INCIDENTS */}
+        <div className="dashboard-main">
+          {/* 3 GRAPHS ROW */}
+          <div className="graphs-row">
+            {/* CPU USAGE */}
+            <div className="graph-card">
+              <div className="graph-header">
+                <span className="graph-title">CPU Usage</span>
+                <span className="graph-value" style={{ color: cpuVal > 80 ? '#ef4444' : cpuVal > 50 ? '#f97316' : '#10b981' }}>
+                  {cpuVal}%
+                </span>
               </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={cpuData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" />
+                  <XAxis dataKey="timestamp" stroke="#718096" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#718096" tick={{ fontSize: 11 }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568', borderRadius: '6px', color: '#e2e8f0', fontSize: '12px' }} 
+                    formatter={(value: any) => [`${value}%`, 'CPU']}
+                  />
+                  <Line type="monotone" dataKey="value" stroke="#3b82f6" dot={false} strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Memory</div>
-              <div className="kpi-value">
-                {memVal}
-                <span className="kpi-unit">%</span>
-                <span className={`kpi-status ${memVal > 80 ? 'critical' : memVal > 60 ? 'warning' : 'normal'}`}></span>
+
+            {/* MEMORY USAGE */}
+            <div className="graph-card">
+              <div className="graph-header">
+                <span className="graph-title">Memory Usage</span>
+                <span className="graph-value" style={{ color: memVal > 80 ? '#ef4444' : memVal > 60 ? '#f97316' : '#10b981' }}>
+                  {memVal}%
+                </span>
               </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={memoryData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" />
+                  <XAxis dataKey="timestamp" stroke="#718096" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#718096" tick={{ fontSize: 11 }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568', borderRadius: '6px', color: '#e2e8f0', fontSize: '12px' }} 
+                    formatter={(value: any) => [`${value}%`, 'Memory']}
+                  />
+                  <Line type="monotone" dataKey="value" stroke="#8b5cf6" dot={false} strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Incidents</div>
-              <div className="kpi-value">
-                {incidents.length}
-                <span className={`kpi-status ${criticalCount > 0 ? 'critical' : criticalCount > 0 ? 'warning' : 'normal'}`}></span>
+
+            {/* STORAGE LOGS */}
+            <div className="graph-card">
+              <div className="graph-header">
+                <span className="graph-title">Storage Logs</span>
+                <span className="graph-value" style={{ color: storVal > 80 ? '#ef4444' : storVal > 60 ? '#f97316' : '#10b981' }}>
+                  {storVal}%
+                </span>
               </div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-label">Anomalies</div>
-              <div className="kpi-value">
-                {anomalies.filter(a => a.is_anomaly).length}
-                <span className="kpi-status normal"></span>
-              </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={storageData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" />
+                  <XAxis dataKey="timestamp" stroke="#718096" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#718096" tick={{ fontSize: 11 }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4a5568', borderRadius: '6px', color: '#e2e8f0', fontSize: '12px' }} 
+                    formatter={(value: any) => [`${value}%`, 'Storage']}
+                  />
+                  <Line type="monotone" dataKey="value" stroke="#06b6d4" dot={false} strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Incidents Section */}
-          <div className="incidents-section">
-            <div className="section-header">
-              <div>
-                <div className="section-title">Incidents</div>
-                <div className="section-meta">{incidents.length} active incidents</div>
-              </div>
+          {/* INCIDENTS PANEL */}
+          <div className="incidents-panel-enterprise">
+            <div className="panel-header">
+              <span className="panel-title">Active Incidents</span>
+              <span className="incident-count">{incidents.length}</span>
             </div>
-            <div className="incidents-list">
+            <div className="incidents-list-enterprise">
               {incidents.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-text">No incidents detected</div>
-                </div>
+                <div className="empty-message">No active incidents</div>
               ) : (
-                incidents.slice(0, 8).map(inc => (
-                  <div key={inc.incident_id} className={`incident-card ${inc.severity || 'normal'}`}>
-                    <div className="incident-header">
-                      <div className="incident-title">
-                        {inc.affected_pods?.[0] || inc.namespace || 'System'}
-                      </div>
-                      <span className={`incident-badge ${inc.severity || 'normal'}`}>
-                        {inc.severity || 'normal'}
-                      </span>
+                incidents.slice(0, 6).map(inc => (
+                  <div key={inc.incident_id} className="incident-row">
+                    <div className="incident-severity" style={{ borderLeftColor: severityColor(inc.severity) }}></div>
+                    <div className="incident-info">
+                      <div className="incident-name">{inc.affected_pods?.[0] || inc.namespace || 'System'}</div>
+                      <div className="incident-detail">{inc.summary || inc.namespace}</div>
                     </div>
-                    <div className="incident-details">
-                      <span>{inc.namespace}</span>
+                    <div className="incident-meta">
+                      <span className="incident-badge" style={{ backgroundColor: severityColor(inc.severity) + '20', color: severityColor(inc.severity) }}>
+                        {inc.severity?.toUpperCase() || 'INFO'}
+                      </span>
                       <span className="incident-time">{formatTimestamp(inc.timestamp)}</span>
                     </div>
-                    {inc.summary && (
-                      <div className="incident-ai-snippet">{inc.summary}</div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Charts */}
-          <div className="charts-section">
-            <div className="section-title" style={{ marginBottom: '1rem' }}>CPU Trend</div>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={cpuData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="timestamp" stroke="#cbd5e1" />
-                <YAxis stroke="#cbd5e1" />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #475569', borderRadius: '8px', color: '#e0e0e0' }} />
-                <Line type="monotone" dataKey="value" stroke="#0ea5e9" dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* RIGHT: SIDEBAR (AI PANEL + HISTORY) */}
-        <div className="dashboard-sidebar">
-          
-          {/* AI SUGGESTIONS PANEL */}
-          <div className="ai-panel">
-            <div className="ai-header">
-              <div className="ai-icon">AI</div>
-              <div className="ai-title">KORAL AI Panel</div>
-            </div>
-            <div className="suggestions-list">
-              {suggestions.length === 0 ? (
-                <div style={{ color: '#cbd5e1', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>
-                  All systems nominal
-                </div>
-              ) : (
-                suggestions.map(sug => (
-                  <div key={sug.id} className="suggestion-item">
-                    <div>
-                      <span className={`suggestion-severity ${sug.severity}`}></span>
-                      <strong>{sug.title}</strong>
-                    </div>
-                    <div className="suggestion-text">{sug.description}</div>
-                    {sug.autoFixable && (
-                      <div className="suggestion-action">
-                        <button 
-                          className="btn-small btn-apply"
-                          onClick={() => handleApplySuggestion(sug)}
-                        >
-                          Apply Fix
-                        </button>
-                        <button 
-                          className="btn-small btn-dismiss"
-                          onClick={() => setSuggestions(prev => prev.filter(s => s.id !== sug.id))}
-                        >
-                          Dismiss
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* HISTORY PANEL */}
-          <div className="history-panel">
-            <div className="history-title">Fix History</div>
-            <div className="history-list">
-              {history.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-text">No fixes yet</div>
-                </div>
-              ) : (
-                history.map(entry => (
-                  <div key={entry.id} className={`history-item ${entry.actor}`}>
-                    <div className={`history-actor ${entry.actor}`}>
-                      {entry.actor === 'ai' ? 'KORAL AI' : 'DEVELOPER'}
-                    </div>
-                    <div className="history-action">{entry.action}</div>
-                    <div className="history-reason">{entry.reason}</div>
-                    <div className="history-time">{formatTimestamp(entry.timestamp)}</div>
                   </div>
                 ))
               )}
@@ -385,6 +259,10 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* RIGHT: AI CHAT */}
+        <div className="dashboard-sidebar-enterprise">
+          <AIAssistant />
+        </div>
       </div>
     </div>
   );

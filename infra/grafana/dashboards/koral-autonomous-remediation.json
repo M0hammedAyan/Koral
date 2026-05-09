@@ -1,0 +1,37 @@
+{
+  "uid": "koral-autonomous-remediation",
+  "title": "KORAL Autonomous Remediation",
+  "schemaVersion": 30,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Remediation services UP",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+      "targets": [
+        { "expr": "sum(up{job=~\"koral-remediation-planner|koral-approval-engine|koral-sandbox-executor|koral-verification-engine|koral-notifier\"})", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Planner request rate",
+      "gridPos": { "x": 8, "y": 0, "w": 16, "h": 4 },
+      "targets": [
+        { "expr": "rate(http_requests_total{job=\"koral-remediation-planner\"}[1m])", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Executor / Verifier / Notifier request rate (fallback: UP only)",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 6 },
+      "targets": [
+        { "expr": "up{job=\"koral-sandbox-executor\"}", "refId": "A" },
+        { "expr": "up{job=\"koral-verification-engine\"}", "refId": "B" },
+        { "expr": "up{job=\"koral-notifier\"}", "refId": "C" }
+      ]
+    }
+  ]
+}
+

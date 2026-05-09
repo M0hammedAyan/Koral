@@ -8,6 +8,7 @@ import { IncidentDetails } from './pages/IncidentDetails';
 import { DependencyGraph } from './pages/DependencyGraph';
 import { FixHistory } from './pages/FixHistory';
 import { Settings } from './pages/Settings';
+import { RemediationDashboard } from './pages/RemediationDashboard';
 import { api } from './services/api';
 import axios from 'axios';
 import './App.css';
@@ -50,6 +51,7 @@ function App() {
               <Route path="/incident/:id" element={<IncidentDetails />} />
               <Route path="/graph" element={<DependencyGraph />} />
               <Route path="/fixes" element={<FixHistory />} />
+              <Route path="/remediation" element={<RemediationDashboard />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>

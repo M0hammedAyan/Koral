@@ -120,13 +120,13 @@ export const AIAssistant: React.FC = () => {
   };
 
   return (
-    <div className="ai-assistant">
-      <div className="ai-header">
-        <div className="ai-title">
-          <span className="ai-icon">&#129302;</span>
-          <span>KORAL AI</span>
+    <div className="ai-assistant-enterprise">
+      <div className="ai-header-enterprise">
+        <div className="ai-title-enterprise">
+          <span className="ai-icon-enterprise">⚡</span>
+          <span>KORAL AI Assistant</span>
         </div>
-        <div className="ai-tabs">
+        <div className="ai-tabs-enterprise">
           <button className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}>
             Activity
             {aiIncidents.length > 0 && <span className="badge">{aiIncidents.length}</span>}
@@ -139,10 +139,9 @@ export const AIAssistant: React.FC = () => {
 
       {/* ── ACTIVITY TAB ── */}
       {tab === 'activity' && (
-        <div className="ai-activity-list">
+        <div className="ai-activity-list-enterprise">
           {aiIncidents.length === 0 ? (
-            <div className="ai-empty">
-              <div style={{ fontSize: '2rem' }}>&#128269;</div>
+            <div className="ai-empty-enterprise">
               <div>No AI activity yet</div>
               <div className="ai-empty-sub">AI analyses incidents automatically when they occur</div>
             </div>
@@ -150,7 +149,7 @@ export const AIAssistant: React.FC = () => {
             aiIncidents.map((inc, i) => {
               const action = ACTION_LABELS[inc.ai_action] ?? { label: inc.ai_action, color: '#888' };
               return (
-                <div key={inc.incident_id ?? i} className={`ai-activity-card ${inc.severity}`}>
+                <div key={inc.incident_id ?? i} className={`ai-activity-card-enterprise ${inc.severity}`}>
                   <div className="ai-activity-header">
                     <span className="ai-action-label" style={{ color: action.color }}>
                       {action.label}
@@ -163,11 +162,6 @@ export const AIAssistant: React.FC = () => {
                   </div>
                   <div className="ai-activity-footer">
                     <span className="ai-model-badge">{inc.ai_model ?? 'GPT-4o'}</span>
-                    <span className="ai-pods">
-                      {Array.isArray(inc.affected_pods)
-                        ? inc.affected_pods.join(', ')
-                        : inc.affected_pods}
-                    </span>
                   </div>
                 </div>
               );
@@ -178,23 +172,22 @@ export const AIAssistant: React.FC = () => {
 
       {/* ── CHAT TAB ── */}
       {tab === 'chat' && (
-        <div className="ai-chat">
+        <div className="ai-chat-enterprise">
           <div className="ai-chat-messages">
             {chat.length === 0 && (
-              <div className="ai-chat-welcome">
-                <div className="ai-welcome-icon">&#129302;</div>
-                <div>Hi! I am KORAL AI powered by GPT-4o.</div>
-                <div style={{ fontSize: '0.8rem', color: '#555', marginTop: '0.25rem' }}>
-                  Ask me about your incidents, pods, or cluster health.
+              <div className="ai-chat-welcome-enterprise">
+                <div>KORAL AI Assistant</div>
+                <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                  Ask me about incidents, system health, or infrastructure issues.
                 </div>
-                <div className="ai-suggestions">
+                <div className="ai-suggestions-enterprise">
                   {[
                     "What happened to web-server-pod?",
                     "Why is CPU critical?",
-                    "How do I fix CPU saturation?",
-                    "What should the developer do now?",
+                    "Analyze current incidents",
+                    "System status summary",
                   ].map(s => (
-                    <button key={s} className="ai-suggestion" onClick={() => setInput(s)}>
+                    <button key={s} className="ai-suggestion-enterprise" onClick={() => setInput(s)}>
                       {s}
                     </button>
                   ))}
@@ -203,7 +196,7 @@ export const AIAssistant: React.FC = () => {
             )}
 
             {chat.map((msg, i) => (
-              <div key={i} className={`ai-message ${msg.role}`}>
+              <div key={i} className={`ai-message-enterprise ${msg.role}`}>
                 <div className="ai-message-bubble">
                   {msg.text.split('\n').map((line, j) => (
                     <p key={j}>{line}</p>
@@ -211,7 +204,7 @@ export const AIAssistant: React.FC = () => {
                 </div>
                 <div className="ai-message-meta">
                   {msg.role === 'ai' && msg.model && (
-                    <span className="ai-model-badge">{msg.model}</span>
+                    <span className="ai-model-badge-small">{msg.model}</span>
                   )}
                   <span className="ai-message-time">{fmt(msg.timestamp)}</span>
                 </div>
@@ -219,7 +212,7 @@ export const AIAssistant: React.FC = () => {
             ))}
 
             {loading && (
-              <div className="ai-message ai">
+              <div className="ai-message-enterprise ai">
                 <div className="ai-message-bubble ai-typing">
                   <span></span><span></span><span></span>
                 </div>
@@ -228,13 +221,13 @@ export const AIAssistant: React.FC = () => {
             <div ref={chatEndRef} />
           </div>
 
-          <div className="ai-chat-input">
+          <div className="ai-chat-input-enterprise">
             <input
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder="Ask KORAL AI anything..."
+              placeholder="Ask KORAL AI..."
               disabled={loading}
             />
             <button onClick={sendMessage} disabled={loading || !input.trim()}>

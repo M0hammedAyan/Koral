@@ -36,6 +36,7 @@ class LogAgent(BaseAgent):
                 r = await client.get(f"{PROMETHEUS_URL}/api/v1/query", params={"query": QUERY})
                 results = r.json().get("data", {}).get("result", [])
                 if results:
+                    setattr(self, "_synthetic_mode", False)
                     return float(results[0]["value"][1])
         except Exception:
             pass
@@ -44,6 +45,7 @@ class LogAgent(BaseAgent):
             async with httpx.AsyncClient(timeout=5) as client:
                 r = await client.get(f"http://{FLUENTD_HOST}:{FLUENTD_PORT}/api/plugins.json")
                 plugins = r.json().get("plugins", [])
+                setattr(self, "_synthetic_mode", False)
                 return float(sum(
                     p.get("emit_records", 0)
                     for p in plugins
@@ -53,6 +55,7 @@ class LogAgent(BaseAgent):
             pass
 
         # final fallback: synthetic log errors
+        setattr(self, "_synthetic_mode", True)
         now = asyncio.get_event_loop().time()
         base = getattr(self, "_syn_base", None)
         if base is None:

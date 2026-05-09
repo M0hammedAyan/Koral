@@ -35,6 +35,8 @@ class BaseAgent:
         self.registry = CollectorRegistry()
         self.gauges = {}
         self._http_thread = None
+        # demo/ops realism: explicitly indicate when agent is using synthetic fallback
+        self.create_gauge("koral_agent_synthetic_mode", "1 if agent is using synthetic fallback, else 0")
 
     async def fetch_value(self) -> float:
         raise NotImplementedError
@@ -113,6 +115,12 @@ class BaseAgent:
                 # update Prometheus gauges via hook
                 try:
                     self.on_measure(value, z, payload)
+                except Exception:
+                    pass
+
+                # expose synthetic mode gauge if subclasses set it
+                try:
+                    self.set_gauge("koral_agent_synthetic_mode", 1.0 if getattr(self, "_synthetic_mode", False) else 0.0)
                 except Exception:
                     pass
 

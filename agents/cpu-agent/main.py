@@ -33,12 +33,14 @@ class CpuAgent(BaseAgent):
                 r = await client.get(f"{PROMETHEUS_URL}/api/v1/query", params={"query": QUERY})
                 results = r.json().get("data", {}).get("result", [])
                 if results:
+                    setattr(self, "_synthetic_mode", False)
                     raw = sum(float(item["value"][1]) for item in results) * 100
                     return min(round(raw, 4), 100.0)
         except Exception:
             pass
 
         # fallback: synthetic fluctuating CPU for demo
+        setattr(self, "_synthetic_mode", True)
         now = asyncio.get_event_loop().time()
         base = getattr(self, "_syn_base", None)
         if base is None:

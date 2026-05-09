@@ -1,0 +1,227 @@
+"""
+KORAL Verification Engine - Post-fix validation and effectiveness measurement
+Verifies remediation success by comparing pre/post metrics
+"""
+import os
+import json
+import uuid
+import asyncio
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Optional, List
+import httpx
+import logging
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import sys
+import statistics
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="KORAL Verification Engine",
+    version="1.0.0",
+    description="Post-fix validation and effectiveness measurement"
+)
+
+# ── Configuration ──────────────────────────────────────────────────
+BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090")
+VERIFICATION_WAIT_SECONDS = int(os.getenv("VERIFICATION_WAIT_SECONDS", "60"))
+SUCCESS_THRESHOLD = float(os.getenv("VERIFICATION_SUCCESS_THRESHOLD", "0.7"))
+Z_SCORE_IMPROVEMENT_TARGET = float(os.getenv("Z_SCORE_IMPROVEMENT_TARGET", "1.5"))
+
+# ── Models ─────────────────────────────────────────────────────────
+class VerificationRequest(BaseModel):
+    execution_id: str
+    plan_id: str
+    incident_id: str
+    affected_pods: List[str]
+    primary_metric: str
+    pre_metrics: Dict
+
+class VerificationResult(BaseModel):
+    verification_id: str
+    execution_id: str
+    plan_id: str
+    status: str
+    verification_status: str
+    pre_metrics: Dict
+    post_metrics: Dict
+    improvement_percent: float
+    anomaly_resolved: bool
+    z_score_delta: float
+    verification_details: str
+    duration_ms: int
+
+# ── Verification Store ──────────────────────────────────────────────
+verification_store = {}
+
+# ── Health Check ──────────────────────────────────────────────────
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "service": "verification-engine",
+        "version": "1.0.0",
+        "success_threshold": SUCCESS_THRESHOLD,
+        "verification_wait_seconds": VERIFICATION_WAIT_SECONDS
+    }
+
+# ── Query Prometheus Metrics ──────────────────────────────────────
+async def query_metrics(metric_name: str, pods: List[str], duration_minutes: int = 5) -> Dict:
+    """Query Prometheus for metric data"""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Build PromQL query for pods
+            pod_filter = "|".join(pods[:5])  # Limit to 5 pods
+            query = f"avg(rate({metric_name}[5m])) by (pod_name) and on(pod_name) pod_name=~\"{pod_filter}\""
+            
+            response = await client.get(
+                f"{PROMETHEUS_URL}/api/v1/query",
+                params={"query": query}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("data", {}).get("result"):
+                    values = [float(v[1]) for v in data["data"]["result"] if len(v) > 1]
+                    if values:
+                        return {
+                            "mean": statistics.mean(values),
+                            "median": statistics.median(values),
+                            "stdev": statistics.stdev(values) if len(values) > 1 else 0,
+                            "min": min(values),
+                            "max": max(values),
+                            "count": len(values)
+                        }
+    except Exception as e:
+        logger.error(f"Failed to query Prometheus: {e}")
+    
+    return {}
+
+# ── Calculate Z-Score ────────────────────────────────────────────
+def calculate_z_score(value: float, mean: float, stdev: float) -> float:
+    """Calculate Z-score"""
+    if stdev == 0:
+        return 0
+    return (value - mean) / stdev
+
+# ── Verify Remediation ──────────────────────────────────────────
+@app.post("/verify", response_model=VerificationResult)
+async def verify_remediation(request: VerificationRequest):
+    """Verify remediation effectiveness"""
+    
+    verification_id = str(uuid.uuid4())
+    start_time = datetime.now(timezone.utc)
+    
+    logger.info(f"Verifying remediation: exec={request.execution_id}, metric={request.primary_metric}")
+    
+    # Wait for metrics to stabilize
+    logger.info(f"Waiting {VERIFICATION_WAIT_SECONDS}s for metrics to stabilize...")
+    await asyncio.sleep(VERIFICATION_WAIT_SECONDS)
+    
+    # Query post-remediation metrics
+    post_metrics = await query_metrics(request.primary_metric, request.affected_pods)
+    
+    if not post_metrics:
+        logger.warning("Failed to retrieve post-remediation metrics")
+        return VerificationResult(
+            verification_id=verification_id,
+            execution_id=request.execution_id,
+            plan_id=request.plan_id,
+            status="failed",
+            verification_status="inconclusive",
+            pre_metrics=request.pre_metrics,
+            post_metrics={},
+            improvement_percent=0.0,
+            anomaly_resolved=False,
+            z_score_delta=0.0,
+            verification_details="Could not retrieve post-remediation metrics",
+            duration_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+        )
+    
+    # Calculate improvement
+    pre_mean = request.pre_metrics.get("mean", 0)
+    post_mean = post_metrics.get("mean", 0)
+    
+    if pre_mean > 0:
+        improvement_percent = ((pre_mean - post_mean) / pre_mean) * 100
+    else:
+        improvement_percent = 0
+    
+    # Calculate Z-score change
+    pre_z = calculate_z_score(
+        pre_mean,
+        request.pre_metrics.get("mean", 0),
+        request.pre_metrics.get("stdev", 1)
+    )
+    post_z = calculate_z_score(
+        post_mean,
+        post_metrics.get("mean", 0),
+        post_metrics.get("stdev", 1)
+    )
+    z_score_delta = pre_z - post_z
+    
+    # Determine if remediation was successful
+    success = (
+        improvement_percent >= SUCCESS_THRESHOLD * 100 or
+        z_score_delta >= Z_SCORE_IMPROVEMENT_TARGET
+    )
+    
+    details = f"""
+    Pre-remediation mean: {pre_mean:.2f}
+    Post-remediation mean: {post_mean:.2f}
+    Improvement: {improvement_percent:.1f}%
+    Pre Z-score: {pre_z:.2f}
+    Post Z-score: {post_z:.2f}
+    Z-score improvement: {z_score_delta:.2f}
+    Success: {success}
+    """
+    
+    result = VerificationResult(
+        verification_id=verification_id,
+        execution_id=request.execution_id,
+        plan_id=request.plan_id,
+        status="success" if success else "partial_success",
+        verification_status="resolved" if success else "improving",
+        pre_metrics=request.pre_metrics,
+        post_metrics=post_metrics,
+        improvement_percent=improvement_percent,
+        anomaly_resolved=success,
+        z_score_delta=z_score_delta,
+        verification_details=details.strip(),
+        duration_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+    )
+    
+    # Store result
+    verification_store[verification_id] = result.dict()
+    
+    logger.info(f"Verification complete: {verification_id} - status={result.verification_status}")
+    
+    return result
+
+# ── Get Verification Result ──────────────────────────────────────
+@app.get("/result/{verification_id}", response_model=VerificationResult)
+async def get_verification(verification_id: str):
+    """Get verification result"""
+    if verification_id not in verification_store:
+        raise HTTPException(status_code=404, detail="Verification not found")
+    
+    return VerificationResult(**verification_store[verification_id])
+
+# ── Metrics ──────────────────────────────────────────────────────
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    from prometheus_client import generate_latest
+    return generate_latest()
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8010, workers=2)

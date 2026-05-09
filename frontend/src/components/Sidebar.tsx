@@ -11,6 +11,7 @@ export const Sidebar: React.FC<{ collapsed: boolean }> = ({ collapsed }) => {
     { path: '/incidents', label: 'Incidents', icon: 'alert' },
     { path: '/graph', label: 'Dependency Graph', icon: 'network' },
     { path: '/fixes', label: 'Fix History', icon: 'tools' },
+    { path: '/remediation', label: 'Remediation', icon: 'remediation' },
     { path: '/settings', label: 'Settings', icon: 'settings' }
   ];
 
@@ -47,6 +48,12 @@ export const Sidebar: React.FC<{ collapsed: boolean }> = ({ collapsed }) => {
       tools: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+      ),
+      remediation: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 7v5l3 2"/>
         </svg>
       ),
       settings: (

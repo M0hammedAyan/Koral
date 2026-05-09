@@ -261,6 +261,121 @@ services:
       backend:
         condition: service_healthy
 
+  # ── Remediation Microservices (disabled by default) ───────────────
+
+  remediation-planner:
+    build:
+      context: ./remediation-planner
+      dockerfile: Dockerfile
+    image: koral-remediation-planner:latest
+    container_name: koral-remediation-planner
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "8007:8007"
+    environment:
+      BACKEND_URL:           http://backend:8000
+      AI_ENGINE_URL:         http://ai-engine:8006
+      REMEDIATION_ENABLED:   ${REMEDIATION_ENABLED:-false}
+      REMEDIATION_TIMEOUT:   ${REMEDIATION_TIMEOUT_SECONDS:-300}
+    depends_on:
+      backend:
+        condition: service_healthy
+      ai-engine:
+        condition: service_healthy
+
+  approval-engine:
+    build:
+      context: ./approval-engine
+      dockerfile: Dockerfile
+    image: koral-approval-engine:latest
+    container_name: koral-approval-engine
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "8008:8008"
+    environment:
+      BACKEND_URL:               http://backend:8000
+      APPROVAL_EMAIL:            ${APPROVAL_EMAIL:-remediation@koral.local}
+      APPROVAL_RECIPIENTS:       ${APPROVAL_RECIPIENTS:-admin@example.com}
+      APPROVAL_TIMEOUT_MINUTES:  ${APPROVAL_TIMEOUT_MINUTES:-30}
+      AUTO_APPROVE_MINOR:        ${AUTO_APPROVE_MINOR:-false}
+      SMTP_HOST:                 ${SMTP_HOST:-localhost}
+      SMTP_PORT:                 ${SMTP_PORT:-1025}
+      DISABLE_EMAIL:             ${DISABLE_EMAIL:-true}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  sandbox-executor:
+    build:
+      context: ./sandbox-executor
+      dockerfile: Dockerfile
+    image: koral-sandbox-executor:latest
+    container_name: koral-sandbox-executor
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "8009:8009"
+    environment:
+      BACKEND_URL:                    http://backend:8000
+      REMEDIATION_PLANNER_URL:        http://remediation-planner:8007
+      REMEDIATION_TIMEOUT_SECONDS:    ${REMEDIATION_TIMEOUT_SECONDS:-300}
+      REMEDIATION_MAX_PODS_PER_FIX:   ${REMEDIATION_MAX_PODS_PER_FIX:-5}
+      DRY_RUN:                        ${DRY_RUN:-true}
+      NAMESPACE:                      ${KORAL_NAMESPACE:-koral-system}
+      ALLOW_CROSS_NAMESPACE:          ${ALLOW_CROSS_NAMESPACE:-false}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  verification-engine:
+    build:
+      context: ./verification-engine
+      dockerfile: Dockerfile
+    image: koral-verification-engine:latest
+    container_name: koral-verification-engine
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "8010:8010"
+    environment:
+      BACKEND_URL:                     http://backend:8000
+      PROMETHEUS_URL:                  ${PROMETHEUS_URL:-http://prometheus:9090}
+      VERIFICATION_WAIT_SECONDS:       ${VERIFICATION_WAIT_SECONDS:-30}
+      VERIFICATION_SUCCESS_THRESHOLD:  ${VERIFICATION_SUCCESS_THRESHOLD:-0.7}
+      Z_SCORE_IMPROVEMENT_TARGET:      ${Z_SCORE_IMPROVEMENT_TARGET:-1.5}
+    depends_on:
+      backend:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+
+  notifier:
+    build:
+      context: ./notifier
+      dockerfile: Dockerfile
+    image: koral-notifier:latest
+    container_name: koral-notifier
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "8011:8011"
+    environment:
+      TELEGRAM_BOT_TOKEN:        ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID:          ${TELEGRAM_CHAT_ID:-}
+      SLACK_WEBHOOK:             ${SLACK_WEBHOOK:-}
+      SMTP_HOST:                 ${SMTP_HOST:-localhost}
+      SMTP_PORT:                 ${SMTP_PORT:-1025}
+      NOTIFICATION_EMAIL:        ${NOTIFICATION_EMAIL:-koral@example.com}
+      NOTIFICATION_RECIPIENTS:   ${NOTIFICATION_RECIPIENTS:-admin@example.com}
+      DISABLE_EMAIL:             ${DISABLE_EMAIL:-true}
+      DISABLE_TELEGRAM:          ${DISABLE_TELEGRAM:-true}
+      DISABLE_SLACK:             ${DISABLE_SLACK:-true}
+    depends_on:
+      backend:
+        condition: service_healthy
+
 networks:
   koral:
     driver: bridge

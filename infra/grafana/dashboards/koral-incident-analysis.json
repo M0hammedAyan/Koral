@@ -1,0 +1,45 @@
+{
+  "uid": "koral-incident-analysis",
+  "title": "KORAL Incident Analysis",
+  "schemaVersion": 30,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Correlation engine request rate",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 5 },
+      "targets": [
+        { "expr": "rate(koral_correlation_requests_total[1m])", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "AI engine request rate",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 5 },
+      "targets": [
+        { "expr": "rate(koral_ai_requests_total[1m])", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Anomaly scores (latest)",
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 6 },
+      "targets": [
+        { "expr": "cpu_anomaly_score", "refId": "A" },
+        { "expr": "memory_anomaly_score", "refId": "B" },
+        { "expr": "log_anomaly_count", "refId": "C" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Prometheus scrape health",
+      "gridPos": { "x": 0, "y": 11, "w": 24, "h": 4 },
+      "targets": [
+        { "expr": "min(up)", "refId": "A" }
+      ]
+    }
+  ]
+}
+

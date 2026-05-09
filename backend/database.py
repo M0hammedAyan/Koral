@@ -269,5 +269,5 @@ def get_incident(incident_id):
     return query_one(sql, (incident_id,))
 
 
-# Initialize on module load
-init_db()
+# Note: init_db() is now called from main.py lifespan handler
+# to ensure database is ready before initialization
