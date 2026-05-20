@@ -14,6 +14,8 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import sys
+from notification.telegram import send_telegram_alert, format_telegram_message
+from backend.slack_notify import send_slack_alert
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +34,7 @@ app = FastAPI(
 # ── Configuration ──────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-SLACK_WEBHOOK = os.getenv("SLACK_WEBHOOK", "")
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", os.getenv("SLACK_WEBHOOK", ""))
 SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "1025"))
 NOTIFICATION_EMAIL = os.getenv("NOTIFICATION_EMAIL", "koral@example.com")
@@ -49,6 +51,10 @@ class Notification(BaseModel):
     status: str
     message: str
     affected_pods: List[str]
+    service: Optional[str] = None
+    issue: Optional[str] = None
+    suggested_fix: Optional[str] = None
+    confidence: Optional[float] = None
     remediation_plan_id: Optional[str] = None
     execution_id: Optional[str] = None
     verification_id: Optional[str] = None
@@ -62,7 +68,7 @@ def health():
         "version": "1.0.0",
         "telegram_enabled": not DISABLE_TELEGRAM and bool(TELEGRAM_BOT_TOKEN),
         "email_enabled": not DISABLE_EMAIL,
-        "slack_enabled": not DISABLE_SLACK and bool(SLACK_WEBHOOK)
+        "slack_enabled": not DISABLE_SLACK and bool(SLACK_WEBHOOK_URL)
     }
 
 # ── Send Email Notification ──────────────────────────────────────
@@ -117,35 +123,9 @@ async def send_telegram_notification(notification: Notification) -> bool:
     if DISABLE_TELEGRAM or not TELEGRAM_BOT_TOKEN:
         logger.info("[TELEGRAM DISABLED] Would send to Telegram")
         return True
-    
     try:
-        message = f"""
-🚨 *KORAL Alert*
-*Incident:* {notification.incident_id}
-*Severity:* {notification.severity.upper()}
-*Root Cause:* {notification.root_cause}
-*Status:* {notification.status}
-*Affected Pods:* {len(notification.affected_pods)}
-*Message:* {notification.message}
-        """.strip()
-        
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
-        
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(url, json=payload)
-            
-            if response.status_code == 200:
-                logger.info(f"Sent Telegram notification for {notification.incident_id}")
-                return True
-            else:
-                logger.error(f"Telegram API error: {response.status_code}")
-                return False
-    
+        message = format_telegram_message(notification.model_dump())
+        return await send_telegram_alert(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, message)
     except Exception as e:
         logger.error(f"Failed to send Telegram: {e}")
         return False
@@ -153,45 +133,18 @@ async def send_telegram_notification(notification: Notification) -> bool:
 # ── Send Slack Notification ──────────────────────────────────────
 async def send_slack_notification(notification: Notification) -> bool:
     """Send Slack notification"""
-    if DISABLE_SLACK or not SLACK_WEBHOOK:
+    if DISABLE_SLACK or not SLACK_WEBHOOK_URL:
         logger.info("[SLACK DISABLED] Would send to Slack")
         return True
-    
+
     try:
-        color_map = {
-            "low": "#36a64f",
-            "medium": "#ffa500",
-            "high": "#ff6347",
-            "critical": "#dc143c"
-        }
-        
-        payload = {
-            "attachments": [
-                {
-                    "color": color_map.get(notification.severity, "#808080"),
-                    "title": f"{notification.severity.upper()} - {notification.root_cause}",
-                    "fields": [
-                        {"title": "Incident ID", "value": notification.incident_id, "short": True},
-                        {"title": "Status", "value": notification.status, "short": True},
-                        {"title": "Affected Pods", "value": str(len(notification.affected_pods)), "short": True},
-                        {"title": "Message", "value": notification.message, "short": False}
-                    ],
-                    "footer": "KORAL Alert",
-                    "ts": int(datetime.now(timezone.utc).timestamp())
-                }
-            ]
-        }
-        
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(SLACK_WEBHOOK, json=payload)
-            
-            if response.status_code == 200:
-                logger.info(f"Sent Slack notification for {notification.incident_id}")
-                return True
-            else:
-                logger.error(f"Slack API error: {response.status_code}")
-                return False
-    
+        return send_slack_alert(
+            service=notification.service or "backend",
+            issue=notification.issue or notification.message,
+            root_cause=notification.root_cause,
+            suggested_fix=notification.suggested_fix or notification.message,
+            confidence=notification.confidence if notification.confidence is not None else notification.severity,
+        )
     except Exception as e:
         logger.error(f"Failed to send Slack: {e}")
         return False
@@ -206,8 +159,8 @@ async def send_notification(notification: Notification):
     results = {
         "incident_id": notification.incident_id,
         "email": await send_email_notification(notification),
-        "telegram": await send_telegram_notification(notification),
-        "slack": await send_slack_notification(notification)
+        "slack": await send_slack_notification(notification),
+        "telegram": await send_telegram_notification(notification)
     }
     
     return results

@@ -1,5 +1,9 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
+try:
+    from pydantic import field_validator
+except ImportError:
+    from pydantic import validator as field_validator
 from backend.websocket.manager import manager
 from backend.services.processor import process_anomaly, anomalies
 import logging
@@ -41,7 +45,8 @@ async def receive_anomaly(payload: AnomalyPayload):
     """Receive anomaly data from agents and process it"""
     try:
         logger.info(f"Received anomaly: {payload.pod}/{payload.metric} = {payload.value} (z={payload.z_score:.2f}, anomaly={payload.is_anomaly})")
-        await process_anomaly(payload.model_dump(), manager.broadcast)
+        payload_dict = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+        await process_anomaly(payload_dict, manager.broadcast)
         return {"status": "accepted", "incident_id": None}
     except Exception as e:
         logger.error(f"Error processing anomaly: {e}")

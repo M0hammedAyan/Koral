@@ -5,6 +5,7 @@ import os
 import json
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
+from database.pool import close_pool, install_psycopg2_pool
 
 DB_TYPE = os.getenv("DB_TYPE", "sqlite")  # "sqlite" or "postgres"
 
@@ -24,6 +25,7 @@ if DB_TYPE == "sqlite":
 
 # ── PostgreSQL Setup ───────────────────────────────────────────────
 else:
+    install_psycopg2_pool()
     import psycopg2
     from psycopg2.extras import RealDictCursor
     
@@ -146,6 +148,11 @@ def init_db():
     
     conn.commit()
     conn.close()
+
+
+def close_db_pool():
+    """Dispose the shared PostgreSQL pool on shutdown."""
+    close_pool()
 
 
 # ── Query Helpers ──────────────────────────────────────────────────

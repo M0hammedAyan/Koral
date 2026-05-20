@@ -7,3 +7,10 @@ Dockerfile  text eol=lf
 # Windows-safe for everything else
 *.md        text eol=crlf
 *.txt       text eol=crlf
+
+* text=auto eol=lf
+
+git add --renormalize .
+git commit -m "Normalize line endings to LF"
+git config --global core.autocrlf true
+git config --global core.autocrlf false

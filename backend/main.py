@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 try:
     import prometheus_client
@@ -31,10 +32,14 @@ from backend.routes.fixes import router as fixes_router
 from backend.routes.remediation import router as remediation_router
 from backend.websocket.manager import manager
 from backend.auth import get_allowed_origins, validate_api_key
-from backend.database import init_db
+from backend.database import init_db, close_db_pool, query_one
 from backend.database_remediation import init_remediation_db
 import logging
 import sys
+import time
+from collections import defaultdict
+from typing import Dict, Tuple
+import httpx
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +48,12 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
+
+_ip_requests: Dict[Tuple[str, int], list[float]] = defaultdict(list)
+_key_requests: Dict[Tuple[str, int], list[float]] = defaultdict(list)
+RATE_LIMIT_WINDOW = 60
+RATE_LIMIT_IP = 100
+RATE_LIMIT_API_KEY = 500
 
 
 @asynccontextmanager
@@ -62,6 +73,8 @@ async def lifespan(app: FastAPI):
     logger.info("All routes registered")
     logger.info("Backend ready to accept connections")
     yield
+    await manager.close_all()
+    close_db_pool()
     logger.info("KORAL Backend shutting down...")
 
 
@@ -84,6 +97,36 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(MetricsMiddleware)
 
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        if path in {"/health", "/health/live", "/health/ready", "/metrics", "/docs", "/openapi.json", "/redoc"}:
+            return await call_next(request)
+
+        now = time.time()
+        window = int(now // RATE_LIMIT_WINDOW)
+        client_ip = request.client.host if request.client else "unknown"
+        api_key = request.headers.get("X-API-Key", "")
+
+        def _allow(bucket: Dict[Tuple[str, int], list[float]], key: str, limit: int) -> bool:
+            entries = bucket[(key, window)]
+            entries[:] = [ts for ts in entries if now - ts < RATE_LIMIT_WINDOW]
+            if len(entries) >= limit:
+                return False
+            entries.append(now)
+            return True
+
+        if not _allow(_ip_requests, client_ip, RATE_LIMIT_IP):
+            return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+        if api_key and not _allow(_key_requests, api_key, RATE_LIMIT_API_KEY):
+            return JSONResponse({"detail": "API key rate limit exceeded"}, status_code=429)
+
+        return await call_next(request)
+
+
+app.add_middleware(RateLimitMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_allowed_origins(),
@@ -102,14 +145,29 @@ app.include_router(fixes_router)
 app.include_router(remediation_router)
 
 
+@app.get("/health/live")
+def health_live():
+    return {"status": "ok", "live": True, "service": "koral-backend"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    try:
+        query_one("SELECT 1")
+        async with httpx.AsyncClient(timeout=2) as client:
+            ai_response = await client.get("http://ai-engine:8006/health")
+            correlation_response = await client.get("http://correlation-engine:8005/health")
+            if ai_response.status_code != 200 or correlation_response.status_code != 200:
+                raise RuntimeError("downstream dependency unavailable")
+        return {"status": "ok", "ready": True, "service": "koral-backend"}
+    except Exception:
+        return JSONResponse({"status": "degraded", "ready": False, "service": "koral-backend"}, status_code=503)
+
+
 @app.get("/health")
 def health():
-    """Health check endpoint for Kubernetes liveness/readiness probes"""
-    return {
-        "status": "ok",
-        "version": "2.0.0",
-        "service": "koral-backend"
-    }
+    """Backward-compatible liveness endpoint."""
+    return {"status": "ok", "version": "2.0.0", "service": "koral-backend"}
 
 
 @app.get("/metrics")

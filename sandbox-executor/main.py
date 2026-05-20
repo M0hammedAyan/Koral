@@ -15,6 +15,7 @@ import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import sys
+from executor import SandboxExecutor
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +30,8 @@ app = FastAPI(
     version="1.0.0",
     description="Safe command execution with strict safety controls"
 )
+
+sandbox_executor = SandboxExecutor(os.path.join(os.path.dirname(__file__), "allowed_commands.yaml"))
 
 # ── Configuration ──────────────────────────────────────────────────
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
@@ -64,6 +67,7 @@ class ExecutionResult(BaseModel):
     duration_ms: int
     pod_failures: List[str]
     blast_radius: int
+    verification_status: str = "pending"
 
 # ── Approved Commands (argv-only; no shell) ─────────────────────────
 # IMPORTANT: This service must never execute arbitrary shell strings.
@@ -279,42 +283,22 @@ async def execute_command_safely(command: str, parameters: Dict) -> Dict:
 @app.post("/execute", response_model=ExecutionResult)
 async def execute_remediation(request: ExecutionRequest):
     """Execute approved remediation command"""
-    
     logger.info(f"Execute request: plan={request.plan_id}, command={request.command}")
-    
-    # Validate execution
-    valid, error = validate_execution(request.command, request.parameters, request.affected_pods)
-    if not valid:
-        logger.error(f"Validation failed: {error}")
-        raise HTTPException(status_code=400, detail=error)
-    
-    # Execute command (argv-only allowlist, no shell)
-    cmd_result = await execute_command_safely(request.command, request.parameters)
-    
-    # Determine pod failures
-    pod_failures = []
-    if cmd_result["exit_code"] != 0:
-        pod_failures = request.affected_pods[:MAX_PODS_PER_FIX]
-    
-    result = ExecutionResult(
-        execution_id=cmd_result["execution_id"],
-        plan_id=request.plan_id,
-        status=cmd_result["status"],
-        command=request.command,
-        exit_code=cmd_result["exit_code"],
-        stdout=cmd_result["stdout"],
-        stderr=cmd_result["stderr"],
-        duration_ms=cmd_result["duration_ms"],
-        pod_failures=pod_failures,
-        blast_radius=len(request.affected_pods)
-    )
-    
-    # Store execution record
+    cmd_result = await sandbox_executor.submit(request)
+    result = ExecutionResult(**cmd_result)
     execution_store[result.execution_id] = result.dict()
-    
     logger.info(f"Execution complete: {result.execution_id} - status={result.status}")
-    
     return result
+
+
+@app.on_event("startup")
+async def _startup():
+    sandbox_executor.start()
+
+
+@app.on_event("shutdown")
+async def _shutdown():
+    await sandbox_executor.stop()
 
 # ── Get Execution History ──────────────────────────────────────────
 @app.get("/executions/{plan_id}")
@@ -335,4 +319,4 @@ async def metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8009, workers=2)
+    uvicorn.run("main:app", host="0.0.0.0", port=8009)

@@ -24,5 +24,13 @@ class ConnectionManager:
         for ws in dead:
             self.active.remove(ws)
 
+    async def close_all(self):
+        for ws in list(self.active):
+            try:
+                await ws.close()
+            except Exception:
+                pass
+        self.active.clear()
+
 
 manager = ConnectionManager()

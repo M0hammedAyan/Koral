@@ -1,0 +1,49 @@
+restart_deployment:
+  argv:
+    - kubectl
+    - rollout
+    - restart
+    - deployment/{deployment}
+    - -n
+    - {namespace}
+  timeout_seconds: 60
+
+scale_deployment:
+  argv:
+    - kubectl
+    - scale
+    - deployment/{deployment}
+    - --replicas={replicas}
+    - -n
+    - {namespace}
+  timeout_seconds: 60
+
+top_pod:
+  argv:
+    - kubectl
+    - top
+    - pod
+    - {pod_name}
+    - -n
+    - {namespace}
+  timeout_seconds: 60
+
+describe_pod:
+  argv:
+    - kubectl
+    - describe
+    - pod
+    - {pod_name}
+    - -n
+    - {namespace}
+  timeout_seconds: 60
+
+delete_pod:
+  argv:
+    - kubectl
+    - delete
+    - pod/{pod_name}
+    - -n
+    - {namespace}
+    - --grace-period={grace_period}
+  timeout_seconds: 60

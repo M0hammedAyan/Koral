@@ -5,6 +5,8 @@ import httpx
 import json
 from datetime import datetime, timezone
 from typing import List, Dict
+from tenacity import retry, stop_after_attempt, wait_exponential
+import pybreaker
 from backend.database import (
     insert_anomaly, insert_incident, update_incident, get_incidents,
     execute, query_all, query_one
@@ -12,6 +14,9 @@ from backend.database import (
 
 CORRELATION_URL = os.getenv("CORRELATION_ENGINE_URL", "http://localhost:8005")
 AI_ENGINE_URL   = os.getenv("AI_ENGINE_URL", "http://localhost:8006")
+
+CORRELATION_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=60)
+AI_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=60)
 
 # ── In-memory cache (fast reads) ────────────────────────────────────
 anomalies: List[dict] = []
@@ -117,17 +122,14 @@ async def process_anomaly(data: dict, broadcast_fn):
 
     # Call correlation engine
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.post(f"{CORRELATION_URL}/correlate", json=data)
-            if r.status_code == 200:
-                result = r.json()
-                if "correlation" in result:
-                    correlations.append(result)
-                _handle_correlation_result(result)
-                await broadcast_fn({"type": "incident", "payload": result})
-
-                # Call AI engine asynchronously (don't block the response)
-                asyncio.create_task(_call_ai_engine(result, data, broadcast_fn))
+        result = await _call_correlation_engine(data)
+        if result and getattr(result, "status_code", 0) == 200:
+            payload = result.json()
+            if "correlation" in payload:
+                correlations.append(payload)
+            _handle_correlation_result(payload)
+            await broadcast_fn({"type": "incident", "payload": payload})
+            asyncio.create_task(_call_ai_engine(payload, data, broadcast_fn))
     except Exception as e:
         print(f"[processor] correlation engine unreachable: {e}")
 
@@ -146,38 +148,56 @@ async def _call_ai_engine(incident: dict, anomaly: dict, broadcast_fn):
             "z_score":     anomaly.get("z_score", 0.0),
             "value":       anomaly.get("value", 0.0),
         }
-        async with httpx.AsyncClient(timeout=35) as client:
-            r = await client.post(f"{AI_ENGINE_URL}/analyze", json=ai_payload)
-            if r.status_code == 200:
-                ai_result = r.json()
-                # Attach AI explanation to the incident
-                incident["ai_explanation"] = ai_result.get("explanation", "")
-                incident["ai_message"]     = ai_result.get("user_message", "")
-                incident["ai_action"]      = ai_result.get("action_type", "")
-                incident["ai_model"]       = ai_result.get("model_used", "")
-                # Update DB
-                _update_incident_ai(incident)
-                # Broadcast updated incident with AI data
-                await broadcast_fn({"type": "incident_ai", "payload": incident})
+        r = await _call_ai_engine_request(ai_payload)
+        if r.status_code == 200:
+            ai_result = r.json()
+            # Attach AI explanation to the incident
+            incident["ai_explanation"] = ai_result.get("explanation", "")
+            incident["ai_message"]     = ai_result.get("user_message", "")
+            incident["ai_action"]      = ai_result.get("action_type", "")
+            incident["ai_model"]       = ai_result.get("model_used", "")
+            # Update DB
+            _update_incident_ai(incident)
+            # Broadcast updated incident with AI data
+            await broadcast_fn({"type": "incident_ai", "payload": incident})
     except Exception as e:
         print(f"[processor] AI engine unreachable: {e}")
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
+def _post_json_sync(url: str, payload: dict, timeout: float):
+    with httpx.Client(timeout=timeout) as client:
+        return client.post(url, json=payload)
+
+
+async def _call_correlation_engine(payload: dict):
+    return await asyncio.to_thread(
+        CORRELATION_BREAKER.call,
+        _post_json_sync,
+        f"{CORRELATION_URL}/correlate",
+        payload,
+        5,
+    )
+
+
+async def _call_ai_engine_request(payload: dict):
+    return await asyncio.to_thread(
+        AI_BREAKER.call,
+        _post_json_sync,
+        f"{AI_ENGINE_URL}/analyze",
+        payload,
+        35,
+    )
+
+
 def _update_incident_ai(incident: dict):
     try:
-        conn = _get_db()
-        conn.execute("""
-            UPDATE incidents SET
-                ai_explanation=?, ai_action=?, ai_model=?
-            WHERE incident_id=?
-        """, (
+        update_incident(
+            incident.get("incident_id"),
             incident.get("ai_explanation", ""),
             incident.get("ai_action", ""),
             incident.get("ai_model", ""),
-            incident.get("incident_id"),
-        ))
-        conn.commit()
-        conn.close()
+        )
     except Exception as e:
         print(f"[db] ai update error: {e}")
 

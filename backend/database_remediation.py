@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timezone
 import json
 from typing import Any, Dict, List, Optional
+from database.pool import install_psycopg2_pool
 
 DB_TYPE = os.getenv("DB_TYPE", "sqlite")
 
@@ -119,6 +120,7 @@ def init_remediation_db():
         conn.close()
     
     else:  # PostgreSQL
+        install_psycopg2_pool()
         import psycopg2
         DB_HOST = os.getenv("DB_HOST", "localhost")
         DB_PORT = int(os.getenv("DB_PORT", "5432"))
@@ -243,6 +245,7 @@ def add_remediation_plan(plan_id, incident_id, severity, root_cause, recommended
         conn.commit()
         conn.close()
     else:
+        install_psycopg2_pool()
         import psycopg2
         DB_HOST = os.getenv("DB_HOST", "localhost")
         DB_PORT = int(os.getenv("DB_PORT", "5432"))
@@ -283,6 +286,7 @@ def get_remediation_plan(plan_id):
         d["parameters"] = _json_loads_safe(d.get("parameters"), {})
         return d
     else:
+        install_psycopg2_pool()
         import psycopg2
         from psycopg2.extras import RealDictCursor
         DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -324,6 +328,7 @@ def list_remediation_plans(limit: int = 100) -> List[Dict[str, Any]]:
             result.append(d)
         return result
     else:
+        install_psycopg2_pool()
         import psycopg2
         from psycopg2.extras import RealDictCursor
         DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -354,6 +359,7 @@ def count_remediation_plans() -> int:
         conn.close()
         return int(n or 0)
     else:
+        install_psycopg2_pool()
         import psycopg2
         DB_HOST = os.getenv("DB_HOST", "localhost")
         DB_PORT = int(os.getenv("DB_PORT", "5432"))
