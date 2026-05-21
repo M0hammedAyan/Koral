@@ -36,12 +36,15 @@ else:
     DB_PASS = os.getenv("DB_PASS", "")
     
     def _get_db():
+        # respect DB connect timeout env var
+        connect_timeout = int(os.getenv("DB_TIMEOUT_DB", "3"))
         conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
             database=DB_NAME,
             user=DB_USER,
-            password=DB_PASS
+            password=DB_PASS,
+            connect_timeout=connect_timeout,
         )
         return conn
 

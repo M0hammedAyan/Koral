@@ -1,6 +1,7 @@
 name: Semantic Version Management
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  HAS_SLACK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
 on:
   pull_request:
@@ -228,7 +229,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Notify Slack
-        if: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.HAS_SLACK == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')))
         uses: slackapi/slack-github-action@v1
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}

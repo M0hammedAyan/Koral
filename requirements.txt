@@ -9,20 +9,9 @@
 # REQUIRED TOOLS
 # ─────────────────────────────────────────────
 
-# Kubernetes local cluster
-minikube >= 1.32.0
-# Install: https://minikube.sigs.k8s.io/docs/start/
-# Windows: winget install Kubernetes.minikube
-
-# Kubernetes CLI
-kubectl >= 1.28.0
-# Install: https://kubernetes.io/docs/tasks/tools/
-# Windows: winget install Kubernetes.kubectl
-
-# Helm — Kubernetes package manager
-helm >= 3.12.0
-# Install: https://helm.sh/docs/intro/install/
-# Windows: winget install Helm.Helm
+# This file documents infra tooling versions for operators. These are NOT Python
+# packages and should not be installed with pip. Use `scripts/setup-infra.sh`
+# to provision these tools on developer machines or CI runners.
 
 # Container runtime
 docker >= 24.0.0

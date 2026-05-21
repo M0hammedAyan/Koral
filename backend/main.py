@@ -2,6 +2,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depe
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.responses import JSONResponse
+import signal
+import asyncio
+
 from starlette.middleware.base import BaseHTTPMiddleware
 try:
     import prometheus_client
@@ -40,6 +43,9 @@ import time
 from collections import defaultdict
 from typing import Dict, Tuple
 import httpx
+from backend.middleware import RequestIDMiddleware, ErrorResponseMiddleware
+from backend.errors import standard_response
+from backend.resilience import CircuitBreaker, call_with_circuit
 
 # Configure logging
 logging.basicConfig(
@@ -80,9 +86,32 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="KORAL Backend",
-    version="2.0.0",
-    description="Kubernetes Observability with Real-time AI Logic - Backend API",
-    lifespan=lifespan,
+    # graceful shutdown handling
+    shutdown_event = asyncio.Event()
+
+    def _on_signal():
+        logger.info("SIGTERM received, initiating graceful shutdown")
+        shutdown_event.set()
+
+    if hasattr(signal, "SIGTERM"):
+        loop = asyncio.get_event_loop()
+        try:
+            loop.add_signal_handler(signal.SIGTERM, _on_signal)
+        except Exception:
+            # not all platforms support add_signal_handler
+            pass
+
+    try:
+        yield
+        # wait for external shutdown event if set (timeout window)
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=int(__import__("os").environ.get("SHUTDOWN_TIMEOUT", "30")))
+        except asyncio.TimeoutError:
+            pass
+    finally:
+        await manager.close_all()
+        close_db_pool()
+        logger.info("KORAL Backend shutting down...")
 )
 
 # Prometheus metrics
@@ -96,6 +125,8 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(MetricsMiddleware)
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(ErrorResponseMiddleware)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

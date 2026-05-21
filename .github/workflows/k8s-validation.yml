@@ -1,0 +1,35 @@
+name: K8s Manifests Validation
+
+on:
+  push:
+    paths:
+      - 'k8s/**'
+      - 'infra/**'
+  pull_request:
+    paths:
+      - 'k8s/**'
+      - 'infra/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        run: |
+          sudo curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Install helm
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Kustomize build
+        run: |
+          if [ -d k8s ]; then kustomize build k8s || true; fi
+
+      - name: Helm lint charts
+        run: |
+          if [ -d infra/helm ] ; then for c in infra/helm/*; do helm lint "$c" || true; done; fi

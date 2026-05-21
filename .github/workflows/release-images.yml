@@ -8,6 +8,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
+  HAS_SLACK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
   REGISTRY: ghcr.io
   IMAGE_NAME_BACKEND: ${{ github.repository }}/koral-backend
   IMAGE_NAME_AI_ENGINE: ${{ github.repository }}/koral-ai-engine
@@ -143,8 +144,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Notify Slack
+        if: env.HAS_SLACK == 'true'
         uses: slackapi/slack-github-action@v1
-        if: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |

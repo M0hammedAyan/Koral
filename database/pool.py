@@ -11,12 +11,16 @@ from sqlalchemy.pool import QueuePool
 
 @lru_cache(maxsize=1)
 def get_engine():
-    db_host = os.getenv("DB_HOST", "localhost")
-    db_port = int(os.getenv("DB_PORT", "5432"))
-    db_name = os.getenv("DB_NAME", "koral")
-    db_user = os.getenv("DB_USER", "koral")
-    db_pass = os.getenv("DB_PASS", "")
-    database_url = f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if not database_url:
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = int(os.getenv("DB_PORT", "5432"))
+        db_name = os.getenv("DB_NAME", "koral")
+        db_user = os.getenv("DB_USER", "koral")
+        db_pass = os.getenv("DB_PASS", "")
+        database_url = f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    elif database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return create_engine(
         database_url,
         poolclass=QueuePool,

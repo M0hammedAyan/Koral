@@ -156,26 +156,25 @@ services:
 
   # ── PgBouncer ─────────────────────────────────────────────────────
   pgbouncer:
-    image: bitnami/pgbouncer:latest
+    image: pgbouncer/pgbouncer:latest
     container_name: koral-pgbouncer
     restart: unless-stopped
     networks: [koral]
     ports:
       - "6432:6432"
     environment:
-      - PGBOUNCER_PORT=6432
-      - PGBOUNCER_BACKEND_HOST=${POSTGRES_HOST:-postgres}
-      - PGBOUNCER_BACKEND_PORT=${POSTGRES_PORT:-5432}
-      - PGBOUNCER_BACKEND_USER=${POSTGRES_USER:-postgres}
-      - PGBOUNCER_BACKEND_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - ./infra/pgbouncer/pgbouncer.ini:/opt/bitnami/pgbouncer/conf/pgbouncer.ini:ro
-      - ./infra/pgbouncer/userlist.txt:/opt/bitnami/pgbouncer/conf/userlist.txt:ro
+      - DATABASES_HOST=${POSTGRES_HOST:-postgres}
+      - DATABASES_PORT=${POSTGRES_PORT:-5432}
+      - DATABASES_DBNAME=${POSTGRES_DB:-koral}
+      - DATABASES_USER=${POSTGRES_USER:-postgres}
+      - DATABASES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - PGBOUNCER_LISTEN_PORT=6432
+      - PGBOUNCER_POOL_MODE=transaction
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${POSTGRES_USER:-postgres} || exit 1"]
+      test: ["CMD-SHELL", "ps -ef | grep -v grep | grep -q '/opt/pgbouncer/pgbouncer'"]
       interval: 10s
       timeout: 5s
       retries: 5

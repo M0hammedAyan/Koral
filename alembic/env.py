@@ -14,18 +14,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Attempt to import project metadata; fall back to None to keep scaffold safe.
-target_metadata = None
+# Autogenerate metadata is declared in backend.schema_metadata.
 try:
-    # try common locations
-    from backend.database import metadata as db_metadata
-    target_metadata = db_metadata
+    from backend.schema_metadata import metadata as target_metadata
 except Exception:
-    try:
-        from backend.models import metadata as models_metadata
-        target_metadata = models_metadata
-    except Exception:
-        target_metadata = None
+    target_metadata = None
 
 
 def get_url():
