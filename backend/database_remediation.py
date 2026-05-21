@@ -6,9 +6,11 @@ import os
 from datetime import datetime, timezone
 import json
 from typing import Any, Dict, List, Optional
-from database.pool import install_psycopg2_pool
 
-DB_TYPE = os.getenv("DB_TYPE", "sqlite")
+# Reuse application's DB abstraction so pooling and PgBouncer are used consistently
+from backend import database as _database
+
+DB_TYPE = _database.DB_TYPE
 
 def _json_dumps_safe(value: Any) -> str:
     if value is None:
@@ -120,21 +122,8 @@ def init_remediation_db():
         conn.close()
     
     else:  # PostgreSQL
-        install_psycopg2_pool()
-        import psycopg2
-        DB_HOST = os.getenv("DB_HOST", "localhost")
-        DB_PORT = int(os.getenv("DB_PORT", "5432"))
-        DB_NAME = os.getenv("DB_NAME", "koral")
-        DB_USER = os.getenv("DB_USER", "koral")
-        DB_PASS = os.getenv("DB_PASS", "")
-        
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            database=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS
-        )
+        # Use shared application DB accessor so pooling is consistent (and PgBouncer is used)
+        conn = _database._get_db()
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -245,16 +234,7 @@ def add_remediation_plan(plan_id, incident_id, severity, root_cause, recommended
         conn.commit()
         conn.close()
     else:
-        install_psycopg2_pool()
-        import psycopg2
-        DB_HOST = os.getenv("DB_HOST", "localhost")
-        DB_PORT = int(os.getenv("DB_PORT", "5432"))
-        DB_NAME = os.getenv("DB_NAME", "koral")
-        DB_USER = os.getenv("DB_USER", "koral")
-        DB_PASS = os.getenv("DB_PASS", "")
-        conn = psycopg2.connect(
-            host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASS
-        )
+        conn = _database._get_db()
         cursor = conn.cursor()
         now = datetime.now(timezone.utc).isoformat()
         cursor.execute("""
@@ -286,17 +266,8 @@ def get_remediation_plan(plan_id):
         d["parameters"] = _json_loads_safe(d.get("parameters"), {})
         return d
     else:
-        install_psycopg2_pool()
-        import psycopg2
         from psycopg2.extras import RealDictCursor
-        DB_HOST = os.getenv("DB_HOST", "localhost")
-        DB_PORT = int(os.getenv("DB_PORT", "5432"))
-        DB_NAME = os.getenv("DB_NAME", "koral")
-        DB_USER = os.getenv("DB_USER", "koral")
-        DB_PASS = os.getenv("DB_PASS", "")
-        conn = psycopg2.connect(
-            host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASS
-        )
+        conn = _database._get_db()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("SELECT * FROM remediation_plans WHERE plan_id=%s", (plan_id,))
         row = cursor.fetchone()
@@ -328,15 +299,8 @@ def list_remediation_plans(limit: int = 100) -> List[Dict[str, Any]]:
             result.append(d)
         return result
     else:
-        install_psycopg2_pool()
-        import psycopg2
         from psycopg2.extras import RealDictCursor
-        DB_HOST = os.getenv("DB_HOST", "localhost")
-        DB_PORT = int(os.getenv("DB_PORT", "5432"))
-        DB_NAME = os.getenv("DB_NAME", "koral")
-        DB_USER = os.getenv("DB_USER", "koral")
-        DB_PASS = os.getenv("DB_PASS", "")
-        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASS)
+        conn = _database._get_db()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("SELECT * FROM remediation_plans ORDER BY id DESC LIMIT %s", (limit,))
         rows = cursor.fetchall()
@@ -359,14 +323,7 @@ def count_remediation_plans() -> int:
         conn.close()
         return int(n or 0)
     else:
-        install_psycopg2_pool()
-        import psycopg2
-        DB_HOST = os.getenv("DB_HOST", "localhost")
-        DB_PORT = int(os.getenv("DB_PORT", "5432"))
-        DB_NAME = os.getenv("DB_NAME", "koral")
-        DB_USER = os.getenv("DB_USER", "koral")
-        DB_PASS = os.getenv("DB_PASS", "")
-        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASS)
+        conn = _database._get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(1) FROM remediation_plans")
         (n,) = cursor.fetchone()

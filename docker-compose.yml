@@ -68,8 +68,8 @@ services:
       - koral-data:/data
     environment:
       DB_TYPE:                postgres
-      DB_HOST:                postgres
-      DB_PORT:                5432
+      DB_HOST:                pgbouncer
+      DB_PORT:                6432
       DB_USER:                ${POSTGRES_USER:-postgres}
       DB_PASS:                ${POSTGRES_PASSWORD:-postgres}
       DB_NAME:                ${POSTGRES_DB:-koral}
@@ -81,6 +81,8 @@ services:
       JWT_SECRET:             ${JWT_SECRET:-dev-jwt-secret}
       DISABLE_AUTH:           ${DISABLE_AUTH:-false}
     depends_on:
+      pgbouncer:
+        condition: service_healthy
       postgres:
         condition: service_healthy
 
@@ -148,6 +150,32 @@ services:
       POSTGRES_DB:       ${POSTGRES_DB:-koral}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── PgBouncer ─────────────────────────────────────────────────────
+  pgbouncer:
+    image: bitnami/pgbouncer:latest
+    container_name: koral-pgbouncer
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "6432:6432"
+    environment:
+      - PGBOUNCER_PORT=6432
+      - PGBOUNCER_BACKEND_HOST=${POSTGRES_HOST:-postgres}
+      - PGBOUNCER_BACKEND_PORT=${POSTGRES_PORT:-5432}
+      - PGBOUNCER_BACKEND_USER=${POSTGRES_USER:-postgres}
+      - PGBOUNCER_BACKEND_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./infra/pgbouncer/pgbouncer.ini:/opt/bitnami/pgbouncer/conf/pgbouncer.ini:ro
+      - ./infra/pgbouncer/userlist.txt:/opt/bitnami/pgbouncer/conf/userlist.txt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${POSTGRES_USER:-postgres} || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
