@@ -4,7 +4,7 @@
 > 
 > Real-time anomaly detection → Root cause analysis → AI explanations → Automated incident response
 
-[![Production Ready](https://img.shields.io/badge/status-production%20ready-brightgreen)](DEPLOYMENT_CHECKLIST.md)
+[![Production Ready](https://img.shields.io/badge/status-production%20ready-brightgreen)](docs/DEPLOYMENT.md)
 [![Version](https://img.shields.io/badge/version-2.0.0-blue)](README.md)
 
 ---
@@ -271,9 +271,9 @@ minikube delete
 
 ## Documentation
 
-- [Production Deployment Guide](PRODUCTION_GUIDE.md) — Detailed deployment instructions
-- [Deployment Checklist](DEPLOYMENT_CHECKLIST.md) — Pre-deployment validation
-- [Architecture Details](README.md) — This file
+- [Deployment Guide & Checklist](docs/DEPLOYMENT.md)
+- [Production Readiness](docs/PRODUCTION_READINESS.md)
+- [Architecture Details](docs/ARCHITECTURE.md)
 
 ---
 

@@ -1,1 +1,0 @@
-﻿KORAL Production Readiness - COMPLETE

@@ -2,7 +2,7 @@
 
 High-level architecture and pointers.
 
-See detailed architecture and audit in `SYSTEM_AUDIT_COMPLETE.md` and `PRODUCTION_READINESS_REPORT.md`.
+See detailed architecture and production-readiness notes in `docs/PRODUCTION_READINESS.md`.
 
 Components:
 - Agents (CPU, Memory, Storage, Log)
