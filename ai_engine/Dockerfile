@@ -35,7 +35,6 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Copy application code
 COPY main.py .
-COPY prompts/ ./prompts/
 
 # Create temporary directories with proper permissions
 RUN mkdir -p /tmp/app && chown -R koral:koral /tmp/app
