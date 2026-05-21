@@ -310,4 +310,4 @@ kubectl delete namespace koral-system
 - [Kubernetes Best Practices](https://kubernetes.io/docs/concepts/configuration/overview/)
 - [PostgreSQL on Kubernetes](https://www.postgresql.org/docs/)
 - [Prometheus Operator](https://prometheus-operator.dev/)
-- [Production Grade Checklist](../PRODUCTION_DEPLOYMENT.md)
+- [Production Grade Checklist](../docs/DEPLOYMENT.md)

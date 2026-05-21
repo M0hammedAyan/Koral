@@ -100,33 +100,9 @@ minikube service frontend -n koral-system
 
 ---
 
-## Testing with Simulations
+## Demo simulators
 
-Deploy simulation pods to generate real anomalies:
-
-```bash
-# CPU spike — triggers CPU saturation incident
-kubectl apply -f infra/k8s/simulation/cpu-spike.yaml
-
-# Memory pressure — triggers OOM warning
-kubectl apply -f infra/k8s/simulation/memory-pressure.yaml
-
-# I/O storm — triggers storage bottleneck
-kubectl apply -f infra/k8s/simulation/io-storm.yaml
-
-# Log errors — triggers application error spike
-kubectl apply -f infra/k8s/simulation/log-error-gen.yaml
-```
-
-**Expected Timeline:**
-1. Simulation pod starts (0s)
-2. Agent detects anomaly (10-20s)
-3. Correlation engine identifies root cause (2s)
-4. AI generates explanation (3-5s)
-5. Dashboard updates via WebSocket (<1s)
-6. Email alert sent for critical incidents (if configured)
-
-**Total: Under 30 seconds from issue to notification**
+Demo/simulation pods and synthetic anomaly injectors were removed in this cleanup pass. Use real Prometheus metrics or the historical simulation scripts in `system-intelligence-evaluation` if needed for legacy testing.
 
 ---
 

@@ -180,19 +180,8 @@ fi
 
 echo ""
 
-# ── 6. Check simulation pods (for demo) ────────────────────────
-echo "6. Checking simulation pods (for demo)..."
-
-SIMS=("cpu-spike" "memory-pressure" "io-storm" "log-error-gen")
-
-for sim in "${SIMS[@]}"; do
-    if [ -f "infra/k8s/simulation/$sim.yaml" ]; then
-        pass "Simulation: $sim"
-    else
-        warn "Simulation missing: $sim (optional)"
-    fi
-done
-
+# ── 6. Demo simulators ─────────────────────────────────────────
+echo "6. Demo simulators: removed in cleanup pass (optional)"
 echo ""
 
 # ── 7. Check scripts ────────────────────────────────────────────

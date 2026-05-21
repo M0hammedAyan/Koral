@@ -125,7 +125,7 @@ All 6 production-readiness issues have been fixed and implemented. The system is
 | `k8s/prometheus-deployment.yaml` | Prometheus deployment with scrape configs |
 | `docker-compose-prod.yml` | Production-ready Docker Compose setup |
 | `prometheus.yml` | Prometheus configuration for Docker Compose |
-| `PRODUCTION_DEPLOYMENT.md` | Complete deployment guide |
+| `docs/DEPLOYMENT.md` | Complete deployment guide |
 
 ---
 
@@ -290,7 +290,7 @@ curl -X POST http://localhost:8000/anomalies \
 
 ## Documentation
 
-- See `PRODUCTION_DEPLOYMENT.md` for complete deployment guide
+- See `docs/DEPLOYMENT.md` for complete deployment guide
 - See `backend/auth.py` for authentication usage
 - See `backend/database.py` for database abstraction
 - See individual K8s files for component details
