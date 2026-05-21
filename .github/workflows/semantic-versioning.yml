@@ -228,7 +228,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Notify Slack
-        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))) }}
         uses: slackapi/slack-github-action@v1
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
