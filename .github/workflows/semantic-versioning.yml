@@ -47,17 +47,17 @@ jobs:
           
           # Check for breaking changes
           if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
-            echo "bump_type=major" >> $GITHUB_OUTPUT
-            echo "has_breaking=true" >> $GITHUB_OUTPUT
+            printf '%s\n' "bump_type=major" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "has_breaking=true" >> "$GITHUB_OUTPUT"
           elif echo "$COMMITS" | grep -q "^feat"; then
-            echo "bump_type=minor" >> $GITHUB_OUTPUT
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            printf '%s\n' "bump_type=minor" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "has_breaking=false" >> "$GITHUB_OUTPUT"
           elif echo "$COMMITS" | grep -q "^fix"; then
-            echo "bump_type=patch" >> $GITHUB_OUTPUT
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            printf '%s\n' "bump_type=patch" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "has_breaking=false" >> "$GITHUB_OUTPUT"
           else
-            echo "bump_type=none" >> $GITHUB_OUTPUT
-            echo "has_breaking=false" >> $GITHUB_OUTPUT
+            printf '%s\n' "bump_type=none" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "has_breaking=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Comment PR with version bump analysis
@@ -148,7 +148,7 @@ jobs:
             fi
           fi
           
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          printf '%s\n' "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
           
           # Parse version
           IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
@@ -171,7 +171,7 @@ jobs:
           esac
           
           NEW_VERSION="$major.$minor.$patch"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          printf '%s\n' "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $CURRENT_VERSION → $NEW_VERSION (bump: $BUMP_TYPE)"
 
       - name: Update VERSION file

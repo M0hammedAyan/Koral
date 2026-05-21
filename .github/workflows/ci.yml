@@ -69,7 +69,8 @@ jobs:
           pip install -r tests/requirements.txt
       - name: Run tests
         run: |
-          export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/agents"
+          PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/agents"
+          export PYTHONPATH
           python -m pytest tests/ -v --tb=short
       - name: Build Docker images (for validation)
         uses: docker/build-push-action@v5
