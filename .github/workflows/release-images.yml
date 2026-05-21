@@ -125,6 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -135,7 +136,10 @@ jobs:
         with:
           tag: ${{ needs.validate-version.outputs.version }}
           name: "Release ${{ needs.validate-version.outputs.version }}"
-          generateReleaseNotes: true
+          body: |
+            Production image release for version ${{ needs.validate-version.outputs.version }}.
+
+            See the image build logs and repository history for details.
           draft: false
           prerelease: ${{ contains(needs.validate-version.outputs.version, 'rc') || contains(needs.validate-version.outputs.version, 'beta') }}
 

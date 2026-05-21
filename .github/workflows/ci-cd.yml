@@ -16,12 +16,13 @@ env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE: ${{ github.repository }}/koral
   AI_ENGINE_IMAGE: ${{ github.repository }}/koral-ai-engine
-  HAS_KUBECONFIG: ${{ secrets.KUBECONFIG != '' }}
 
 jobs:
   publish-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      HAS_KUBECONFIG: ${{ secrets.KUBECONFIG != '' }}
     permissions:
       contents: read
       packages: write
