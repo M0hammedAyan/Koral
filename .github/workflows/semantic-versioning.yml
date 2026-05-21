@@ -5,7 +5,6 @@ concurrency:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
-  HAS_SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -230,36 +229,3 @@ jobs:
           git commit -m "docs: update changelog for v${{ needs.create-release.outputs.new_version }}" || true
           git push
 
-  notify-release:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    needs: create-release
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Notify Slack
-        if: ${{ env.HAS_SLACK_WEBHOOK == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))) }}
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*KORAL Version Released*\nVersion: `v${{ needs.create-release.outputs.new_version }}`\nRepository: ${{ github.repository }}"
-                  }
-                },
-                {
-                  "type": "divider"
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Status*: Released\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
-                  }
-                }
-              ]
-            }

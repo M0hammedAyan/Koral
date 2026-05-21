@@ -7,11 +7,9 @@ on:
   push:
     tags:
       - 'v*.*.*'
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
-  HAS_SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
   REGISTRY: ghcr.io
 
 jobs:
@@ -141,26 +139,3 @@ jobs:
           draft: false
           prerelease: ${{ contains(needs.validate-version.outputs.version, 'rc') || contains(needs.validate-version.outputs.version, 'beta') }}
 
-  notify-deployment:
-    needs: [validate-version, create-release]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Notify Slack
-        if: ${{ env.HAS_SLACK_WEBHOOK == 'true' }}
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "🚀 KORAL Release ${{ needs.validate-version.outputs.version }} - Images pushed to registry",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*KORAL Production Release*\nVersion: `${{ needs.validate-version.outputs.version }}`\nAll images built and scanned ✅"
-                  }
-                }
-              ]
-            }
