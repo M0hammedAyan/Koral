@@ -1,0 +1,6 @@
+; PgBouncer userlist. Do NOT commit real credentials.
+; Format: "username" "md5<md5hash>" or plain-text if auth_type supports it.
+; Example (use pg_md5 or other tooling to generate md5 entry):
+; "postgres" "md5<your_md5_hash_here>"
+
+; Provision real entries by mounting a securely generated userlist.txt or using orchestration secrets.

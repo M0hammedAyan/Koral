@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  pgbouncer:
+    image: bitnami/pgbouncer:latest
+    container_name: pgbouncer
+    restart: unless-stopped
+    environment:
+      - PGBOUNCER_PORT=6432
+      - PGBOUNCER_BACKEND_HOST=${POSTGRES_HOST:-database}
+      - PGBOUNCER_BACKEND_PORT=${POSTGRES_PORT:-5432}
+      - PGBOUNCER_BACKEND_USER=${POSTGRES_USER:-postgres}
+      - PGBOUNCER_BACKEND_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ../infra/pgbouncer/pgbouncer.ini:/opt/bitnami/pgbouncer/conf/pgbouncer.ini:ro
+      - ../infra/pgbouncer/userlist.txt:/opt/bitnami/pgbouncer/conf/userlist.txt:ro
+    networks:
+      - koral-net
+
+networks:
+  koral-net:
+    driver: bridge
