@@ -9,8 +9,3 @@ Dockerfile  text eol=lf
 *.txt       text eol=crlf
 
 * text=auto eol=lf
-
-git add --renormalize .
-git commit -m "Normalize line endings to LF"
-git config --global core.autocrlf true
-git config --global core.autocrlf false

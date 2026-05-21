@@ -1,4 +1,7 @@
 name: Release & Build Production Images
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
   push:
@@ -10,14 +13,11 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
   HAS_SLACK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
   REGISTRY: ghcr.io
-  IMAGE_NAME_BACKEND: ${{ github.repository }}/koral-backend
-  IMAGE_NAME_AI_ENGINE: ${{ github.repository }}/koral-ai-engine
-  IMAGE_NAME_CORRELATION: ${{ github.repository }}/koral-correlation-engine
-  IMAGE_NAME_FRONTEND: ${{ github.repository }}/koral-frontend
 
 jobs:
   validate-version:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -38,25 +38,26 @@ jobs:
   build-and-push:
     needs: validate-version
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         image:
           - name: backend
             context: .
             dockerfile: backend/Dockerfile
-            image_name: ${{ env.IMAGE_NAME_BACKEND }}
+            image_name: ${{ github.repository }}/koral-backend
           - name: ai-engine
             context: ./ai_engine
             dockerfile: Dockerfile
-            image_name: ${{ env.IMAGE_NAME_AI_ENGINE }}
+            image_name: ${{ github.repository }}/koral-ai-engine
           - name: correlation-engine
             context: ./correlation-engine
             dockerfile: Dockerfile
-            image_name: ${{ env.IMAGE_NAME_CORRELATION }}
+            image_name: ${{ github.repository }}/koral-correlation-engine
           - name: frontend
             context: ./frontend
             dockerfile: Dockerfile
-            image_name: ${{ env.IMAGE_NAME_FRONTEND }}
+            image_name: ${{ github.repository }}/koral-frontend
     
     permissions:
       contents: read
@@ -126,6 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -142,6 +144,7 @@ jobs:
   notify-deployment:
     needs: [validate-version, create-release]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Notify Slack
         if: env.HAS_SLACK == 'true'

@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ─────────────────────────────────────────────────────────────────────
 #  KORAL — Production-Ready Docker Compose
 #  Includes: PostgreSQL, Prometheus, and proper authentication

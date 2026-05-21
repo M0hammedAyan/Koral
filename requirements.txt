@@ -9,9 +9,8 @@
 # REQUIRED TOOLS
 # ─────────────────────────────────────────────
 
-# This file documents infra tooling versions for operators. These are NOT Python
-# packages and should not be installed with pip. Use `scripts/setup-infra.sh`
-# to provision these tools on developer machines or CI runners.
+# Non-Python infra tooling is documented in `docs/dev-tools.md` and provisioned
+# via `scripts/setup-infra.sh`.
 
 # Container runtime
 docker >= 24.0.0
@@ -44,7 +43,7 @@ docker >= 24.0.0
 # OPTIONAL (CI/CD only)
 # ─────────────────────────────────────────────
 
-# GitHub Actions runner (ubuntu-latest) — used in .github/workflows/ci-cd.yaml
+# GitHub Actions runner (ubuntu-latest) — used in .github/workflows/ci-cd.yml
 # DockerHub account — for image push/pull
 # base64-encoded kubeconfig stored as GitHub secret KUBECONFIG
 
