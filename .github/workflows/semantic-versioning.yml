@@ -5,6 +5,7 @@ concurrency:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
+  HAS_SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -99,7 +100,7 @@ jobs:
           
           # Check commit message format
           if ! echo "$COMMITS" | grep -E '^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\(.+\))?!?: .+' > /dev/null; then
-            echo "❌ Commit messages do not follow Conventional Commits format"
+            echo "Commit messages do not follow Conventional Commits format"
             echo ""
             echo "Required format: <type>(<scope>): <description>"
             echo "Types: feat, fix, docs, style, refactor, perf, test, chore, ci"
@@ -236,7 +237,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Notify Slack
-        if: ${{ secrets.SLACK_WEBHOOK_URL != '' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))) }}
+        if: ${{ env.HAS_SLACK_WEBHOOK == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))) }}
         uses: slackapi/slack-github-action@v1
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -257,7 +258,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Status*: ✅ Released\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
+                    "text": "*Status*: Released\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
                   }
                 }
               ]
