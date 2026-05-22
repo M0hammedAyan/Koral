@@ -43,19 +43,19 @@ jobs:
           - name: backend
             context: .
             dockerfile: backend/Dockerfile
-            image_name: ${{ env.IMAGE_NAME_BACKEND }}
+            image_name: ${{ github.repository }}/koral-backend
           - name: ai-engine
             context: ./ai_engine
             dockerfile: Dockerfile
-            image_name: ${{ env.IMAGE_NAME_AI_ENGINE }}
+            image_name: ${{ github.repository }}/koral-ai-engine
           - name: correlation-engine
             context: ./correlation-engine
             dockerfile: Dockerfile
-            image_name: ${{ env.IMAGE_NAME_CORRELATION }}
+            image_name: ${{ github.repository }}/koral-correlation-engine
           - name: frontend
             context: ./frontend
             dockerfile: Dockerfile
-            image_name: ${{ env.IMAGE_NAME_FRONTEND }}
+            image_name: ${{ github.repository }}/koral-frontend
     
     permissions:
       contents: read
