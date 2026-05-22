@@ -75,7 +75,7 @@ jobs:
           export PYTHONPATH
           python -m pytest tests/ -v --tb=short
       - name: Build Docker images (for validation)
-          uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -84,7 +84,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build AI Engine image (for validation)
-          uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7
         with:
           context: ./ai_engine
           push: false
@@ -93,7 +93,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build Correlation Engine image (for validation)
-          uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7
         with:
           context: ./correlation-engine
           push: false
@@ -102,7 +102,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build Frontend image (for validation)
-          uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           push: false
