@@ -1,7 +1,4 @@
 name: Semantic Version Management
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
@@ -26,11 +23,6 @@ on:
 jobs:
   analyze-commits:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: read
     outputs:
       version_bump: ${{ steps.analyze.outputs.bump_type }}
       breaking_changes: ${{ steps.analyze.outputs.has_breaking }}
@@ -50,17 +42,17 @@ jobs:
           
           # Check for breaking changes
           if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
-            printf '%s\n' "bump_type=major" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "has_breaking=true" >> "$GITHUB_OUTPUT"
+            echo "bump_type=major" >> $GITHUB_OUTPUT
+            echo "has_breaking=true" >> $GITHUB_OUTPUT
           elif echo "$COMMITS" | grep -q "^feat"; then
-            printf '%s\n' "bump_type=minor" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "has_breaking=false" >> "$GITHUB_OUTPUT"
+            echo "bump_type=minor" >> $GITHUB_OUTPUT
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
           elif echo "$COMMITS" | grep -q "^fix"; then
-            printf '%s\n' "bump_type=patch" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "has_breaking=false" >> "$GITHUB_OUTPUT"
+            echo "bump_type=patch" >> $GITHUB_OUTPUT
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
           else
-            printf '%s\n' "bump_type=none" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "has_breaking=false" >> "$GITHUB_OUTPUT"
+            echo "bump_type=none" >> $GITHUB_OUTPUT
+            echo "has_breaking=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Comment PR with version bump analysis
@@ -89,7 +81,6 @@ jobs:
   validate-conventional-commits:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -103,7 +94,7 @@ jobs:
           
           # Check commit message format
           if ! echo "$COMMITS" | grep -E '^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\(.+\))?!?: .+' > /dev/null; then
-            echo "Commit messages do not follow Conventional Commits format"
+            echo "❌ Commit messages do not follow Conventional Commits format"
             echo ""
             echo "Required format: <type>(<scope>): <description>"
             echo "Types: feat, fix, docs, style, refactor, perf, test, chore, ci"
@@ -118,8 +109,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: read
-    timeout-minutes: 15
     outputs:
       new_version: ${{ steps.version.outputs.version }}
     steps:
@@ -154,7 +143,7 @@ jobs:
             fi
           fi
           
-          printf '%s\n' "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
           
           # Parse version
           IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
@@ -177,7 +166,7 @@ jobs:
           esac
           
           NEW_VERSION="$major.$minor.$patch"
-          printf '%s\n' "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Version: $CURRENT_VERSION → $NEW_VERSION (bump: $BUMP_TYPE)"
 
       - name: Update VERSION file
@@ -198,12 +187,11 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ steps.version.outputs.version }}
-          commit: ${{ github.sha }}
           name: "Release ${{ steps.version.outputs.version }}"
           body: |
             Automated release for version ${{ steps.version.outputs.version }}.
 
-            See the repository history and changelog for changes in this release.
+            See the repository history and changelog for details.
           draft: false
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -211,9 +199,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
     needs: create-release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -242,3 +227,49 @@ jobs:
           git commit -m "docs: update changelog for v${{ needs.create-release.outputs.new_version }}" || true
           git push
 
+  notify-release:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve Slack webhook
+        id: slack
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [[ -n "$SLACK_WEBHOOK_URL" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify Slack
+        if: ${{ steps.slack.outputs.enabled == 'true' }}
+        uses: slackapi/slack-github-action@v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook-url: ${{ env.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*KORAL Version Released*\nVersion: `v${{ needs.create-release.outputs.new_version }}`\nRepository: ${{ github.repository }}"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Status*: ✅ Released\n*Commit*: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
+                  }
+                }
+              ]
+            }
