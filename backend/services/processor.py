@@ -5,6 +5,7 @@ import httpx
 import json
 from datetime import datetime, timezone
 from typing import List, Dict
+from contextlib import nullcontext
 from tenacity import retry, stop_after_attempt, wait_exponential
 import pybreaker
 from backend.database import (
@@ -12,11 +13,17 @@ from backend.database import (
     execute, query_all, query_one
 )
 
+try:
+    from opentelemetry import trace
+    TRACER = trace.get_tracer(__name__)
+except Exception:
+    TRACER = None
+
 CORRELATION_URL = os.getenv("CORRELATION_ENGINE_URL", "http://localhost:8005")
 AI_ENGINE_URL   = os.getenv("AI_ENGINE_URL", "http://localhost:8006")
 
-CORRELATION_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=60)
-AI_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=60)
+CORRELATION_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=30)
+AI_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=30)
 
 # ── In-memory cache (fast reads) ────────────────────────────────────
 anomalies: List[dict] = []
@@ -130,8 +137,17 @@ async def process_anomaly(data: dict, broadcast_fn):
             _handle_correlation_result(payload)
             await broadcast_fn({"type": "incident", "payload": payload})
             asyncio.create_task(_call_ai_engine(payload, data, broadcast_fn))
+        else:
+            fallback_incident = _rule_engine_incident(data)
+            _handle_correlation_result(fallback_incident)
+            await broadcast_fn({"type": "incident", "payload": fallback_incident})
+            asyncio.create_task(_call_ai_engine(fallback_incident, data, broadcast_fn))
     except Exception as e:
         print(f"[processor] correlation engine unreachable: {e}")
+        fallback_incident = _rule_engine_incident(data)
+        _handle_correlation_result(fallback_incident)
+        await broadcast_fn({"type": "incident", "payload": fallback_incident})
+        asyncio.create_task(_call_ai_engine(fallback_incident, data, broadcast_fn))
 
 
 async def _call_ai_engine(incident: dict, anomaly: dict, broadcast_fn):
@@ -160,34 +176,80 @@ async def _call_ai_engine(incident: dict, anomaly: dict, broadcast_fn):
             _update_incident_ai(incident)
             # Broadcast updated incident with AI data
             await broadcast_fn({"type": "incident_ai", "payload": incident})
+        else:
+            _apply_rule_engine_fallback(incident, anomaly)
+            _update_incident_ai(incident)
+            await broadcast_fn({"type": "incident_ai", "payload": incident})
     except Exception as e:
         print(f"[processor] AI engine unreachable: {e}")
+        _apply_rule_engine_fallback(incident, anomaly)
+        _update_incident_ai(incident)
+        await broadcast_fn({"type": "incident_ai", "payload": incident})
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
 def _post_json_sync(url: str, payload: dict, timeout: float):
-    with httpx.Client(timeout=timeout) as client:
+    with httpx.Client(timeout=httpx.Timeout(timeout, connect=5.0)) as client:
         return client.post(url, json=payload)
 
 
 async def _call_correlation_engine(payload: dict):
-    return await asyncio.to_thread(
-        CORRELATION_BREAKER.call,
-        _post_json_sync,
-        f"{CORRELATION_URL}/correlate",
-        payload,
-        5,
-    )
+    span_ctx = TRACER.start_as_current_span("correlation.request") if TRACER else nullcontext()
+    with span_ctx as span:
+        if span is not None:
+            span.set_attribute("dependency.name", "correlation-engine")
+        return await asyncio.to_thread(
+            CORRELATION_BREAKER.call,
+            _post_json_sync,
+            f"{CORRELATION_URL}/correlate",
+            payload,
+            10,
+        )
 
 
 async def _call_ai_engine_request(payload: dict):
-    return await asyncio.to_thread(
-        AI_BREAKER.call,
-        _post_json_sync,
-        f"{AI_ENGINE_URL}/analyze",
-        payload,
-        35,
-    )
+    span_ctx = TRACER.start_as_current_span("ai.request") if TRACER else nullcontext()
+    with span_ctx as span:
+        if span is not None:
+            span.set_attribute("dependency.name", "ai-engine")
+        return await asyncio.to_thread(
+            AI_BREAKER.call,
+            _post_json_sync,
+            f"{AI_ENGINE_URL}/analyze",
+            payload,
+            10,
+        )
+
+
+def _rule_engine_incident(anomaly: dict) -> dict:
+    metric = anomaly.get("metric", "unknown")
+    severity_score = abs(float(anomaly.get("z_score", 0.0) or 0.0))
+    severity = "critical" if severity_score >= 4.5 else "high" if severity_score >= 3.0 else "medium"
+    incident_id = anomaly.get("incident_id") or f"INC-{uuid.uuid4().hex[:6].upper()}"
+    return {
+        "incident_id": incident_id,
+        "timestamp": anomaly.get("timestamp"),
+        "namespace": anomaly.get("namespace", "koral-system"),
+        "severity": severity,
+        "root_cause": f"{metric}_anomaly",
+        "summary": anomaly.get("summary") or f"{metric} anomaly on {anomaly.get('pod', 'unknown')}",
+        "affected_pods": [anomaly.get("pod")] if anomaly.get("pod") else [],
+        "primary_metric": metric,
+        "confidence": round(min(severity_score / 5.0, 1.0), 2),
+        "evidence_count": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "root_cause_pod": anomaly.get("pod"),
+        "correlation": severity_score,
+    }
+
+
+def _apply_rule_engine_fallback(incident: dict, anomaly: dict) -> None:
+    metric = anomaly.get("metric", "unknown")
+    severity_score = abs(float(anomaly.get("z_score", 0.0) or 0.0))
+    incident.setdefault("ai_explanation", f"Rule engine fallback detected a {metric} anomaly with z-score {severity_score:.2f}.")
+    incident.setdefault("ai_message", incident["ai_explanation"])
+    incident["ai_action"] = "review_incident"
+    incident["ai_model"] = "RuleEngine"
 
 
 def _update_incident_ai(incident: dict):

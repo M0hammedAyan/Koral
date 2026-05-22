@@ -6,6 +6,8 @@ import logging
 import os
 
 import requests
+import pybreaker
+from tenacity import retry, stop_after_attempt, wait_exponential
 from prometheus_client import Counter
 
 
@@ -13,6 +15,15 @@ logger = logging.getLogger(__name__)
 
 slack_notifications_sent = Counter("slack_notifications_sent", "Slack notifications sent")
 slack_notification_failures = Counter("slack_notification_failures", "Slack notification failures")
+SLACK_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=30)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
+def _deliver_slack(webhook_url: str, message: str):
+    response = requests.post(webhook_url, json={"text": message}, timeout=10)
+    if not response.ok:
+        raise RuntimeError(f"Slack webhook error: {response.status_code}")
+    return response
 
 
 def _format_message(service: str, issue: str, root_cause: str, suggested_fix: str, confidence: str | int | float) -> str:
@@ -41,13 +52,9 @@ def send_slack_alert(service: str, issue: str, root_cause: str, suggested_fix: s
 
     message = _format_message(service, issue, root_cause, suggested_fix, confidence)
     try:
-        response = requests.post(webhook_url, json={"text": message}, timeout=5)
-        if response.ok:
-            slack_notifications_sent.inc()
-            return True
-        slack_notification_failures.inc()
-        logger.error("Slack webhook error: %s", response.status_code)
-        return False
+        SLACK_BREAKER.call(_deliver_slack, webhook_url, message)
+        slack_notifications_sent.inc()
+        return True
     except Exception as exc:
         slack_notification_failures.inc()
         logger.error("Slack send failed: %s", exc)

@@ -2,13 +2,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depe
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.responses import JSONResponse
+import os
 import signal
 import asyncio
 
 from starlette.middleware.base import BaseHTTPMiddleware
 try:
     import prometheus_client
-    from prometheus_client import Counter, CONTENT_TYPE_LATEST
+    from prometheus_client import Counter, Gauge, Histogram, CONTENT_TYPE_LATEST
     PROM_AVAILABLE = True
 except Exception:
     PROM_AVAILABLE = False
@@ -17,7 +18,13 @@ except Exception:
             pass
         def inc(self):
             pass
+        def observe(self, *a, **k):
+            pass
+        def set(self, *a, **k):
+            pass
     Counter = _DummyCounter
+    Gauge = _DummyCounter
+    Histogram = _DummyCounter
     CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
     class _DummyProm:
         @staticmethod
@@ -36,7 +43,6 @@ from backend.routes.remediation import router as remediation_router
 from backend.websocket.manager import manager
 from backend.auth import get_allowed_origins, validate_api_key
 from backend.database import init_db, close_db_pool, query_one
-from backend.database_remediation import init_remediation_db
 import logging
 import sys
 import time
@@ -46,6 +52,17 @@ import httpx
 from backend.middleware import RequestIDMiddleware, ErrorResponseMiddleware
 from backend.errors import standard_response
 from backend.resilience import CircuitBreaker, call_with_circuit
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    OTEL_AVAILABLE = True
+except Exception:
+    OTEL_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(
@@ -60,59 +77,86 @@ _key_requests: Dict[Tuple[str, int], list[float]] = defaultdict(list)
 RATE_LIMIT_WINDOW = 60
 RATE_LIMIT_IP = 100
 RATE_LIMIT_API_KEY = 500
+AI_ENGINE_URL = os.getenv("AI_ENGINE_URL", "http://ai-engine:8006")
+CORRELATION_ENGINE_URL = os.getenv("CORRELATION_ENGINE_URL", "http://correlation-engine:8005")
+
+
+def _configure_tracing(app: FastAPI) -> None:
+    if not OTEL_AVAILABLE:
+        return
+    provider = TracerProvider(
+        resource=Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "koral-backend")})
+    )
+    exporter = OTLPSpanExporter(
+        endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4318/v1/traces")
+    )
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls="/metrics,/health,/health/live,/health/ready,/docs,/openapi.json,/redoc",
+    )
+
+
+if PROM_AVAILABLE:
+    REQUEST_LATENCY = Histogram(
+        "koral_backend_request_latency_seconds",
+        "HTTP request latency for the KORAL backend",
+        ["method", "path"],
+    )
+    ERROR_COUNT = Counter("koral_backend_errors_total", "Total HTTP 5xx responses from the backend")
+    WEBSOCKET_CLIENTS = Gauge("koral_backend_websocket_clients", "Connected backend websocket clients")
+else:
+    REQUEST_LATENCY = None
+    ERROR_COUNT = Counter("koral_backend_errors_total", "Total HTTP 5xx responses from the backend")
+    WEBSOCKET_CLIENTS = Gauge("koral_backend_websocket_clients", "Connected backend websocket clients")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("KORAL Backend starting up...")
+    app.state.shutting_down = False
+    shutdown_event = asyncio.Event()
+    app.state.shutdown_event = shutdown_event
+
+    def _request_shutdown() -> None:
+        if not shutdown_event.is_set():
+            logger.info("Shutdown signal received; stopping request intake")
+            app.state.shutting_down = True
+            shutdown_event.set()
+
+    loop = asyncio.get_running_loop()
+    for sig_name in ("SIGTERM", "SIGINT"):
+        sig = getattr(signal, sig_name, None)
+        if sig is None:
+            continue
+        try:
+            loop.add_signal_handler(sig, _request_shutdown)
+        except Exception:
+            pass
+
     try:
-        init_db()
+        await asyncio.wait_for(asyncio.to_thread(init_db), timeout=10)
         logger.info("Database initialized and loaded")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}", exc_info=True)
-    # Non-breaking: initialize remediation tables (no effect unless remediation enabled)
-    try:
-        init_remediation_db()
-        logger.info("Remediation tables initialized")
-    except Exception as e:
-        logger.warning(f"Failed to initialize remediation tables: {e}")
     logger.info("All routes registered")
     logger.info("Backend ready to accept connections")
     yield
-    await manager.close_all()
-    close_db_pool()
+    app.state.shutting_down = True
+    try:
+        await asyncio.wait_for(manager.close_all(), timeout=30)
+    except Exception as e:
+        logger.warning(f"WebSocket shutdown completed with errors: {e}")
+    try:
+        await asyncio.wait_for(asyncio.to_thread(close_db_pool), timeout=5)
+    except Exception as e:
+        logger.warning(f"Database pool shutdown completed with errors: {e}")
     logger.info("KORAL Backend shutting down...")
 
 
-app = FastAPI(
-    title="KORAL Backend",
-    # graceful shutdown handling
-    shutdown_event = asyncio.Event()
-
-    def _on_signal():
-        logger.info("SIGTERM received, initiating graceful shutdown")
-        shutdown_event.set()
-
-    if hasattr(signal, "SIGTERM"):
-        loop = asyncio.get_event_loop()
-        try:
-            loop.add_signal_handler(signal.SIGTERM, _on_signal)
-        except Exception:
-            # not all platforms support add_signal_handler
-            pass
-
-    try:
-        yield
-        # wait for external shutdown event if set (timeout window)
-        try:
-            await asyncio.wait_for(shutdown_event.wait(), timeout=int(__import__("os").environ.get("SHUTDOWN_TIMEOUT", "30")))
-        except asyncio.TimeoutError:
-            pass
-    finally:
-        await manager.close_all()
-        close_db_pool()
-        logger.info("KORAL Backend shutting down...")
-)
+app = FastAPI(title="KORAL Backend", lifespan=lifespan)
+_configure_tracing(app)
 
 # Prometheus metrics
 REQUEST_COUNT = Counter('koral_backend_requests_total', 'Total HTTP requests to KORAL backend')
@@ -120,8 +164,18 @@ REQUEST_COUNT = Counter('koral_backend_requests_total', 'Total HTTP requests to 
 
 class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        REQUEST_COUNT.inc()
-        return await call_next(request)
+        started = time.perf_counter()
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        finally:
+            REQUEST_COUNT.inc()
+            if REQUEST_LATENCY is not None:
+                REQUEST_LATENCY.labels(method=request.method, path=request.url.path).observe(time.perf_counter() - started)
+            if status_code >= 500:
+                ERROR_COUNT.inc()
 
 
 app.add_middleware(MetricsMiddleware)
@@ -134,6 +188,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in {"/health", "/health/live", "/health/ready", "/metrics", "/docs", "/openapi.json", "/redoc"}:
             return await call_next(request)
+
+        if getattr(request.app.state, "shutting_down", False):
+            return JSONResponse({"detail": "Service shutting down"}, status_code=503)
 
         now = time.time()
         window = int(now // RATE_LIMIT_WINDOW)
@@ -176,6 +233,27 @@ app.include_router(fixes_router)
 app.include_router(remediation_router)
 
 
+async def _dependency_health(url: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(url)
+            return response.status_code == 200
+    except Exception:
+        return False
+
+
+async def _database_health() -> bool:
+    try:
+        await asyncio.wait_for(asyncio.to_thread(query_one, "SELECT 1"), timeout=2.0)
+        return True
+    except Exception:
+        return False
+
+
+def _websocket_health() -> bool:
+    return isinstance(getattr(manager, "active", None), list)
+
+
 @app.get("/health/live")
 def health_live():
     return {"status": "ok", "live": True, "service": "koral-backend"}
@@ -183,22 +261,26 @@ def health_live():
 
 @app.get("/health/ready")
 async def health_ready():
-    try:
-        query_one("SELECT 1")
-        async with httpx.AsyncClient(timeout=2) as client:
-            ai_response = await client.get("http://ai-engine:8006/health")
-            correlation_response = await client.get("http://correlation-engine:8005/health")
-            if ai_response.status_code != 200 or correlation_response.status_code != 200:
-                raise RuntimeError("downstream dependency unavailable")
-        return {"status": "ok", "ready": True, "service": "koral-backend"}
-    except Exception:
-        return JSONResponse({"status": "degraded", "ready": False, "service": "koral-backend"}, status_code=503)
+    return await health()
 
 
 @app.get("/health")
-def health():
-    """Backward-compatible liveness endpoint."""
-    return {"status": "ok", "version": "2.0.0", "service": "koral-backend"}
+async def health():
+    database_ok = await _database_health()
+    correlation_ok = await _dependency_health(f"{CORRELATION_ENGINE_URL}/health")
+    ai_ok = await _dependency_health(f"{AI_ENGINE_URL}/health")
+    websocket_ok = _websocket_health()
+
+    payload = {
+        "status": "healthy" if all([database_ok, correlation_ok, ai_ok, websocket_ok]) else "degraded",
+        "database": "healthy" if database_ok else "unhealthy",
+        "correlation_engine": "healthy" if correlation_ok else "unhealthy",
+        "ai_engine": "healthy" if ai_ok else "unhealthy",
+        "websocket": "healthy" if websocket_ok else "unhealthy",
+    }
+    if payload["status"] != "healthy":
+        return JSONResponse(payload, status_code=503)
+    return payload
 
 
 @app.get("/metrics")
@@ -230,12 +312,15 @@ def root():
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates"""
     await manager.connect(websocket)
+    WEBSOCKET_CLIENTS.set(len(manager.active))
     try:
         while True:
             # Keep connection alive and receive any client messages
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        WEBSOCKET_CLIENTS.set(len(manager.active))
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(websocket)
+        WEBSOCKET_CLIENTS.set(len(manager.active))

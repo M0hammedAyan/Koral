@@ -65,5 +65,5 @@ USER koral
 # Expose port
 EXPOSE 8000
 
-# Run application with multiple workers
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Run migrations, then start the application
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4"]

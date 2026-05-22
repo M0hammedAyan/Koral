@@ -68,6 +68,7 @@ services:
       DB_TYPE:                postgres
       DB_HOST:                pgbouncer
       DB_PORT:                6432
+      DATABASE_URL:           ${DATABASE_URL_PGBOUNCER:-postgresql://postgres:%23%40Ayan2005@pgbouncer:6432/koral}
       DB_USER:                ${POSTGRES_USER:-postgres}
       DB_PASS:                ${POSTGRES_PASSWORD:-postgres}
       DB_NAME:                ${POSTGRES_DB:-koral}

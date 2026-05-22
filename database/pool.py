@@ -12,6 +12,8 @@ from sqlalchemy.pool import QueuePool
 @lru_cache(maxsize=1)
 def get_engine():
     database_url = os.getenv("DATABASE_URL", "").strip()
+    if database_url and "#" in database_url and "%23" not in database_url:
+        database_url = ""
     if not database_url:
         db_host = os.getenv("DB_HOST", "localhost")
         db_port = int(os.getenv("DB_PORT", "5432"))
@@ -29,6 +31,23 @@ def get_engine():
         pool_pre_ping=True,
         future=True,
     )
+
+
+def get_pool_status() -> dict[str, float | int]:
+    engine = get_engine()
+    pool = engine.pool
+    checked_out = int(getattr(pool, "checkedout", lambda: 0)())
+    checked_in = int(getattr(pool, "checkedin", lambda: 0)())
+    pool_size = int(getattr(pool, "size", lambda: 0)())
+    overflow = int(getattr(pool, "overflow", lambda: 0)())
+    utilization = (checked_out / pool_size) if pool_size else 0.0
+    return {
+        "active_connections": checked_out,
+        "checked_in": checked_in,
+        "pool_size": pool_size,
+        "overflow": overflow,
+        "pool_utilization": utilization,
+    }
 
 
 def install_psycopg2_pool() -> None:

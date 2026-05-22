@@ -11,6 +11,9 @@ import os
 from datetime import datetime
 import logging
 
+import pybreaker
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 logger = logging.getLogger(__name__)
 
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
@@ -19,6 +22,15 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 ALERT_EMAIL = os.getenv("ALERT_EMAIL", "")
 KORAL_ENV = os.getenv("KORAL_NAMESPACE", "koral-system")
+EMAIL_BREAKER = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=30)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
+def _deliver_email(message: str, sender: str, recipient: str) -> None:
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASS)
+        server.sendmail(sender, [recipient], message)
 
 
 def send_fix_notification(
@@ -92,10 +104,7 @@ def send_fix_notification(
         msg["To"] = recipient
         msg.attach(MIMEText(html_body, "html"))
         
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, [recipient], msg.as_string())
+        EMAIL_BREAKER.call(_deliver_email, msg.as_string(), SMTP_USER, recipient)
         
         logger.info(f"[email] Fix notification sent to {recipient} for incident {incident_id}")
         return True
@@ -264,10 +273,7 @@ def send_batch_summary_email(fixes_summary: List[dict], recipient_email: Optiona
         msg["To"] = recipient
         msg.attach(MIMEText(html_body, "html"))
         
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, [recipient], msg.as_string())
+        EMAIL_BREAKER.call(_deliver_email, msg.as_string(), SMTP_USER, recipient)
         
         logger.info(f"[email] Batch summary sent to {recipient}")
         return True

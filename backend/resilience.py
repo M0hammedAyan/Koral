@@ -21,6 +21,7 @@ class CircuitBreaker:
     def record_success(self):
         self.fail_count = 0
         self.state = State.CLOSED
+        self.opened_at = 0
 
     def record_failure(self):
         self.fail_count += 1
@@ -45,12 +46,13 @@ async def call_with_circuit(circuit: CircuitBreaker, func: Callable, *args, time
 
     try:
         if asyncio.iscoroutinefunction(func):
-            return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
+            result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
         else:
             loop = asyncio.get_event_loop()
-            return await asyncio.wait_for(loop.run_in_executor(None, lambda: func(*args, **kwargs)), timeout=timeout)
+            result = await asyncio.wait_for(loop.run_in_executor(None, lambda: func(*args, **kwargs)), timeout=timeout)
     except Exception as e:
         circuit.record_failure()
         raise
     else:
         circuit.record_success()
+        return result

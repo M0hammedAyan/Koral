@@ -3,11 +3,54 @@ Database module for KORAL - supports SQLite (dev) and PostgreSQL (prod)
 """
 import os
 import json
+import time
+from contextlib import nullcontext
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
-from database.pool import close_pool, install_psycopg2_pool
+from database.pool import close_pool, install_psycopg2_pool, get_pool_status
+
+try:
+    from prometheus_client import Histogram, Gauge
+except Exception:
+    Histogram = Gauge = None
+
+try:
+    from opentelemetry import trace
+    TRACER = trace.get_tracer(__name__)
+except Exception:
+    TRACER = None
 
 DB_TYPE = os.getenv("DB_TYPE", "sqlite")  # "sqlite" or "postgres"
+
+if Histogram is not None:
+    DB_QUERY_DURATION = Histogram(
+        "koral_db_query_duration_seconds",
+        "Database query duration by operation",
+        ["operation"],
+    )
+    DB_ACTIVE_CONNECTIONS = Gauge(
+        "koral_db_active_connections",
+        "Active database connections in the shared pool",
+    )
+    DB_POOL_UTILIZATION = Gauge(
+        "koral_db_pool_utilization",
+        "Database pool utilization ratio",
+    )
+else:
+    DB_QUERY_DURATION = None
+    DB_ACTIVE_CONNECTIONS = None
+    DB_POOL_UTILIZATION = None
+
+
+def _observe_pool_metrics() -> None:
+    if DB_ACTIVE_CONNECTIONS is None or DB_POOL_UTILIZATION is None:
+        return
+    try:
+        status = get_pool_status()
+        DB_ACTIVE_CONNECTIONS.set(status["active_connections"])
+        DB_POOL_UTILIZATION.set(status["pool_utilization"])
+    except Exception:
+        pass
 
 # ── SQLite Setup ───────────────────────────────────────────────────
 if DB_TYPE == "sqlite":
@@ -53,104 +96,12 @@ else:
 def init_db():
     """Initialize database schema"""
     conn = _get_db()
-    
-    if DB_TYPE == "sqlite":
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS anomalies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp INTEGER, pod TEXT, namespace TEXT,
-                metric TEXT, value REAL, unit TEXT,
-                z_score REAL, is_anomaly INTEGER,
-                window_size INTEGER, source TEXT,
-                created_at TEXT
-            );
-            CREATE TABLE IF NOT EXISTS incidents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                incident_id TEXT UNIQUE,
-                timestamp INTEGER, namespace TEXT,
-                severity TEXT, root_cause TEXT,
-                summary TEXT, affected_pods TEXT,
-                primary_metric TEXT, confidence REAL,
-                evidence_count INTEGER, created_at TEXT,
-                ai_explanation TEXT, ai_action TEXT,
-                ai_model TEXT
-            );
-            CREATE TABLE IF NOT EXISTS fix_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                incident_id TEXT,
-                fix_type TEXT,
-                fix_description TEXT,
-                applied_by TEXT,
-                success INTEGER,
-                error_message TEXT,
-                kubectl_command TEXT,
-                timestamp TEXT,
-                created_at TEXT,
-                FOREIGN KEY (incident_id) REFERENCES incidents(incident_id)
-            );
-            CREATE TABLE IF NOT EXISTS graph_nodes (
-                id TEXT PRIMARY KEY, label TEXT, status TEXT
-            );
-            CREATE TABLE IF NOT EXISTS graph_edges (
-                source TEXT, target TEXT,
-                PRIMARY KEY (source, target)
-            );
-        """)
-    else:  # PostgreSQL
+    try:
         cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS anomalies (
-                id SERIAL PRIMARY KEY,
-                timestamp BIGINT, pod TEXT, namespace TEXT,
-                metric TEXT, value FLOAT, unit TEXT,
-                z_score FLOAT, is_anomaly INTEGER,
-                window_size INTEGER, source TEXT,
-                created_at TEXT
-            );
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS incidents (
-                id SERIAL PRIMARY KEY,
-                incident_id TEXT UNIQUE,
-                timestamp BIGINT, namespace TEXT,
-                severity TEXT, root_cause TEXT,
-                summary TEXT, affected_pods TEXT,
-                primary_metric TEXT, confidence FLOAT,
-                evidence_count INTEGER, created_at TEXT,
-                ai_explanation TEXT, ai_action TEXT,
-                ai_model TEXT
-            );
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS fix_history (
-                id SERIAL PRIMARY KEY,
-                incident_id TEXT,
-                fix_type TEXT,
-                fix_description TEXT,
-                applied_by TEXT,
-                success INTEGER,
-                error_message TEXT,
-                kubectl_command TEXT,
-                timestamp TEXT,
-                created_at TEXT,
-                FOREIGN KEY (incident_id) REFERENCES incidents(incident_id)
-            );
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS graph_nodes (
-                id TEXT PRIMARY KEY, label TEXT, status TEXT
-            );
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS graph_edges (
-                source TEXT, target TEXT,
-                PRIMARY KEY (source, target)
-            );
-        """)
+        cursor.execute("SELECT 1")
+    finally:
         conn.commit()
-    
-    conn.commit()
-    conn.close()
+        conn.close()
 
 
 def close_db_pool():
@@ -161,67 +112,99 @@ def close_db_pool():
 # ── Query Helpers ──────────────────────────────────────────────────
 def query_one(sql: str, params: tuple = ()) -> Optional[dict]:
     """Execute query and return first row as dict"""
+    started = time.perf_counter()
     conn = _get_db()
     try:
-        if DB_TYPE == "sqlite":
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            row = cursor.fetchone()
-            return dict(row) if row else None
-        else:  # PostgreSQL
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(sql, params)
-            return cursor.fetchone()
+        span_ctx = TRACER.start_as_current_span("db.query_one") if TRACER else nullcontext()
+        with span_ctx as span:
+            if span is not None:
+                span.set_attribute("db.operation", "query_one")
+            if DB_TYPE == "sqlite":
+                cursor = conn.cursor()
+                cursor.execute(sql, params)
+                row = cursor.fetchone()
+                return dict(row) if row else None
+            else:  # PostgreSQL
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                cursor.execute(sql, params)
+                return cursor.fetchone()
     finally:
+        if DB_QUERY_DURATION is not None:
+            DB_QUERY_DURATION.labels(operation="query_one").observe(time.perf_counter() - started)
+        _observe_pool_metrics()
         conn.close()
 
 
 def query_all(sql: str, params: tuple = ()) -> List[dict]:
     """Execute query and return all rows as list of dicts"""
+    started = time.perf_counter()
     conn = _get_db()
     try:
-        if DB_TYPE == "sqlite":
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
-        else:  # PostgreSQL
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(sql, params)
-            return cursor.fetchall()
+        span_ctx = TRACER.start_as_current_span("db.query_all") if TRACER else nullcontext()
+        with span_ctx as span:
+            if span is not None:
+                span.set_attribute("db.operation", "query_all")
+            if DB_TYPE == "sqlite":
+                cursor = conn.cursor()
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
+            else:  # PostgreSQL
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                cursor.execute(sql, params)
+                return cursor.fetchall()
     finally:
+        if DB_QUERY_DURATION is not None:
+            DB_QUERY_DURATION.labels(operation="query_all").observe(time.perf_counter() - started)
+        _observe_pool_metrics()
         conn.close()
 
 
 def execute(sql: str, params: tuple = ()) -> int:
     """Execute INSERT/UPDATE/DELETE and return last insert id or rows affected"""
+    started = time.perf_counter()
     conn = _get_db()
     try:
-        cursor = conn.cursor()
-        cursor.execute(sql, params)
-        conn.commit()
-        
-        if DB_TYPE == "sqlite":
-            return cursor.lastrowid
-        else:  # PostgreSQL
-            return cursor.rowcount
+        span_ctx = TRACER.start_as_current_span("db.execute") if TRACER else nullcontext()
+        with span_ctx as span:
+            if span is not None:
+                span.set_attribute("db.operation", "execute")
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            conn.commit()
+
+            if DB_TYPE == "sqlite":
+                return cursor.lastrowid
+            else:  # PostgreSQL
+                return cursor.rowcount
     finally:
+        if DB_QUERY_DURATION is not None:
+            DB_QUERY_DURATION.labels(operation="execute").observe(time.perf_counter() - started)
+        _observe_pool_metrics()
         conn.close()
 
 
 def execute_many(sql: str, params_list: List[tuple]) -> int:
     """Execute multiple INSERT/UPDATE/DELETE"""
+    started = time.perf_counter()
     conn = _get_db()
     try:
-        cursor = conn.cursor()
-        cursor.executemany(sql, params_list)
-        conn.commit()
-        
-        if DB_TYPE == "sqlite":
-            return cursor.lastrowid
-        else:  # PostgreSQL
-            return cursor.rowcount
+        span_ctx = TRACER.start_as_current_span("db.execute_many") if TRACER else nullcontext()
+        with span_ctx as span:
+            if span is not None:
+                span.set_attribute("db.operation", "execute_many")
+            cursor = conn.cursor()
+            cursor.executemany(sql, params_list)
+            conn.commit()
+
+            if DB_TYPE == "sqlite":
+                return cursor.lastrowid
+            else:  # PostgreSQL
+                return cursor.rowcount
     finally:
+        if DB_QUERY_DURATION is not None:
+            DB_QUERY_DURATION.labels(operation="execute_many").observe(time.perf_counter() - started)
+        _observe_pool_metrics()
         conn.close()
 
 
