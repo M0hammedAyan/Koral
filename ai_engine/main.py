@@ -42,6 +42,7 @@ from pydantic import BaseModel
 # ── Config ───────────────────────────────────────────────────────────
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+AI_MAX_TOKENS     = int(os.getenv("AI_MAX_TOKENS", "500"))
 BACKEND_URL       = os.getenv("BACKEND_URL", "http://backend:8000")
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")
 ALERT_EMAIL       = os.getenv("ALERT_EMAIL", "")          # recipient
@@ -139,7 +140,7 @@ async def call_gpt(system_prompt: str, user_prompt: str) -> str:
                         {"role": "system", "content": system_prompt},
                         {"role": "user",   "content": user_prompt},
                     ],
-                    "max_tokens": 600,
+                    "max_tokens": AI_MAX_TOKENS,
                     "temperature": 0.3,
                 },
             )
