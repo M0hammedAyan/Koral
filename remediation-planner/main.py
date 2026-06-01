@@ -28,10 +28,52 @@ app = FastAPI(
 )
 
 # ── Configuration ──────────────────────────────────────────────────
-BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
-AI_ENGINE_URL = os.getenv("AI_ENGINE_URL", "http://ai-engine:8006")
-REMEDIATION_ENABLED = os.getenv("REMEDIATION_ENABLED", "true").lower() == "true"
-REMEDIATION_TIMEOUT = int(os.getenv("REMEDIATION_TIMEOUT", "30"))
+BACKEND_URL          = os.getenv("BACKEND_URL", "http://backend:8000")
+AI_ENGINE_URL        = os.getenv("AI_ENGINE_URL", "http://ai-engine:8006")
+REMEDIATION_ENABLED  = os.getenv("REMEDIATION_ENABLED", "true").lower() == "true"
+REMEDIATION_TIMEOUT  = int(os.getenv("REMEDIATION_TIMEOUT", "30"))
+DEFAULT_NAMESPACE    = os.getenv("NAMESPACE", "koral-system")
+K8S_API_URL          = os.getenv("K8S_API_URL", "https://kubernetes.default.svc")
+K8S_TOKEN_FILE       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+K8S_CA_FILE          = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+
+def _deployment_from_pod(pod_name: str) -> str:
+    """Derive deployment name from pod name by stripping the two trailing hash segments."""
+    parts = pod_name.rsplit("-", 2)
+    return parts[0] if len(parts) == 3 else pod_name
+
+
+async def _k8s_get(path: str) -> Optional[dict]:
+    """Call the in-cluster Kubernetes API."""
+    try:
+        token = open(K8S_TOKEN_FILE).read().strip() if os.path.exists(K8S_TOKEN_FILE) else ""
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        async with httpx.AsyncClient(verify=K8S_CA_FILE if os.path.exists(K8S_CA_FILE) else False,
+                                     timeout=5) as client:
+            r = await client.get(f"{K8S_API_URL}{path}", headers=headers)
+            if r.status_code == 200:
+                return r.json()
+    except Exception as e:
+        logger.debug(f"K8s API call failed ({path}): {e}")
+    return None
+
+
+async def _resolve_namespace(pod_name: str, hint: str) -> str:
+    """Return the namespace the pod actually lives in, falling back to hint."""
+    for ns_candidate in [hint, DEFAULT_NAMESPACE]:
+        data = await _k8s_get(f"/api/v1/namespaces/{ns_candidate}/pods/{pod_name}")
+        if data:
+            return ns_candidate
+    return hint or DEFAULT_NAMESPACE
+
+
+async def _node_for_pod(pod_name: str, namespace: str) -> str:
+    """Return the node name the pod is scheduled on."""
+    data = await _k8s_get(f"/api/v1/namespaces/{namespace}/pods/{pod_name}")
+    if data:
+        return data.get("spec", {}).get("nodeName", "")
+    return ""
 
 # ── Models ─────────────────────────────────────────────────────────
 class RemediationRequest(BaseModel):
@@ -188,65 +230,66 @@ async def create_remediation_plan(request: RemediationRequest):
     plan_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     expires_at = (now + timedelta(hours=1)).isoformat()
-    
-    # Build complete parameters based on command type
+
     action = strategy['primary_action']
     base_params = strategy['parameters'].copy()
-    
-    # Fill in missing required parameters with defaults
+
+    # Resolve real namespace and deployment/pod from affected_pods
+    primary_pod = request.affected_pods[0] if request.affected_pods else ""
+    namespace = await _resolve_namespace(primary_pod, DEFAULT_NAMESPACE) if primary_pod else DEFAULT_NAMESPACE
+    deployment = _deployment_from_pod(primary_pod) if primary_pod else "unknown"
+
     if action == "scale_deployment":
         complete_params = {
-            "deployment": "koral-backend",
-            "namespace": "koral-system",
-            "replicas": base_params.get("replicas", 3)
+            "deployment": deployment,
+            "namespace": namespace,
+            "replicas": base_params.get("replicas", 3),
         }
     elif action == "restart_deployment":
         complete_params = {
-            "deployment": "koral-backend",
-            "namespace": "koral-system",
-            "timeout": base_params.get("timeout", 300)
+            "deployment": deployment,
+            "namespace": namespace,
+            "timeout": base_params.get("timeout", 300),
         }
     elif action == "restart_pod":
         complete_params = {
-            "pod_name": request.affected_pods[0] if request.affected_pods else "pod-1",
-            "namespace": "koral-system",
-            "grace_period": base_params.get("grace_period", 30)
+            "pod_name": primary_pod or "unknown",
+            "namespace": namespace,
+            "grace_period": base_params.get("grace_period", 30),
         }
     elif action == "clear_cache":
         complete_params = {
-            "pod_name": request.affected_pods[0] if request.affected_pods else "pod-1",
-            "namespace": "koral-system",
-            "cache_type": base_params.get("cache_type", "all")
+            "pod_name": primary_pod or "unknown",
+            "namespace": namespace,
+            "cache_type": base_params.get("cache_type", "all"),
         }
     elif action == "drain_node":
+        node = await _node_for_pod(primary_pod, namespace) if primary_pod else ""
         complete_params = {
-            "node_name": "node-1",
+            "node_name": node or "unknown",
             "timeout": base_params.get("timeout", 300),
-            "ignore_daemonsets": True
+            "ignore_daemonsets": True,
         }
     elif action == "trigger_debug_logs":
         complete_params = {
-            "pod_name": request.affected_pods[0] if request.affected_pods else "pod-1",
-            "namespace": "koral-system",
-            "duration": base_params.get("duration", 600)
+            "pod_name": primary_pod or "unknown",
+            "namespace": namespace,
+            "duration": base_params.get("duration", 600),
         }
     else:
         complete_params = base_params
     
-    # Generate AI reasoning
-    ai_reasoning = f"""
-    Incident Analysis:
-    - Root Cause: {request.root_cause}
-    - Severity: {request.severity}
-    - Affected Pods: {len(request.affected_pods)}
-    - Z-Score: {request.z_score:.2f}
-    
-    Recommended Action: {strategy['primary_action']}
-    Confidence: {strategy['confidence']:.0%}
-    Reasoning: {strategy['reasoning']}
-    
-    Parameters: {json.dumps(complete_params)}
-    """
+    ai_reasoning = (
+        f"Incident Analysis:\n"
+        f"- Root Cause: {request.root_cause}\n"
+        f"- Severity: {request.severity}\n"
+        f"- Affected Pods: {len(request.affected_pods)} (namespace: {namespace})\n"
+        f"- Z-Score: {request.z_score:.2f}\n\n"
+        f"Recommended Action: {strategy['primary_action']}\n"
+        f"Confidence: {strategy['confidence']:.0%}\n"
+        f"Reasoning: {strategy['reasoning']}\n\n"
+        f"Parameters: {json.dumps(complete_params)}"
+    )
     
     plan = RemediationPlan(
         plan_id=plan_id,

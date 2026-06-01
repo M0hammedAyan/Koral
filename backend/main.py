@@ -40,6 +40,7 @@ from backend.routes.feedback import router as feedback_router
 from backend.routes.ai import router as ai_router
 from backend.routes.fixes import router as fixes_router
 from backend.routes.remediation import router as remediation_router
+from backend.routes.audit import router as audit_router
 from backend.websocket.manager import manager
 from backend.auth import get_allowed_origins, validate_api_key
 from backend.database import init_db, close_db_pool, query_one
@@ -231,6 +232,7 @@ app.include_router(feedback_router)
 app.include_router(ai_router)
 app.include_router(fixes_router)
 app.include_router(remediation_router)
+app.include_router(audit_router)
 
 
 async def _dependency_health(url: str) -> bool:

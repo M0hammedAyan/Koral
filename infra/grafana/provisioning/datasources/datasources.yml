@@ -3,6 +3,11 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
+    # docker-compose: http://prometheus:9090
+    # kubernetes:     http://monitoring-kube-prometheus-prometheus.koral-system:9090
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST

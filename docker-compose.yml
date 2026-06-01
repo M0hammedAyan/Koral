@@ -188,6 +188,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alert-rules.yaml:/etc/prometheus/alert-rules.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -198,6 +199,57 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Grafana ──────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: koral-grafana
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-koral-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+  # ── AlertManager ─────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: koral-alertmanager
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.listen-address=:9093'
+    environment:
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      ALERT_EMAIL:       ${ALERT_EMAIL:-}
+      SMTP_HOST:         ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT:         ${SMTP_PORT:-587}
+      SMTP_USER:         ${SMTP_USER:-}
+      SMTP_PASS:         ${SMTP_PASS:-}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9093/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   # ── Frontend ─────────────────────────────────────────────────────
   frontend:
@@ -249,6 +301,8 @@ services:
     networks: [koral]
     ports:
       - "8008:8008"
+    volumes:
+      - approval-data:/data
     environment:
       BACKEND_URL:            http://backend:8000
       APPROVAL_EMAIL:         ${APPROVAL_EMAIL:-remediation@koral.local}
@@ -258,6 +312,7 @@ services:
       SMTP_HOST:              ${SMTP_HOST:-localhost}
       SMTP_PORT:              ${SMTP_PORT:-1025}
       DISABLE_EMAIL:          ${DISABLE_EMAIL:-true}
+      APPROVAL_DB_PATH:       /data/approvals.db
     depends_on:
       backend:
         condition: service_started
@@ -340,7 +395,13 @@ networks:
 volumes:
   koral-data:
     driver: local
+  approval-data:
+    driver: local
   postgres-data:
     driver: local
   prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  alertmanager-data:
     driver: local

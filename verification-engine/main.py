@@ -36,6 +36,15 @@ VERIFICATION_WAIT_SECONDS = int(os.getenv("VERIFICATION_WAIT_SECONDS", "60"))
 SUCCESS_THRESHOLD = float(os.getenv("VERIFICATION_SUCCESS_THRESHOLD", "0.7"))
 Z_SCORE_IMPROVEMENT_TARGET = float(os.getenv("Z_SCORE_IMPROVEMENT_TARGET", "1.5"))
 
+# Map KORAL metric names to PromQL expressions
+_METRIC_QUERIES = {
+    "cpu":       'sum(rate(container_cpu_usage_seconds_total{{pod=~"{pods}"}}[2m])) by (pod) * 100',
+    "memory":    'sum(container_memory_working_set_bytes{{pod=~"{pods}"}}) by (pod) / 1048576',
+    "pvc_io":    'sum(rate(container_fs_reads_bytes_total{{pod=~"{pods}"}}[2m]) + rate(container_fs_writes_bytes_total{{pod=~"{pods}"}}[2m])) by (pod) / 1024',
+    "log_error": 'sum(rate(fluentd_output_status_emit_records_total{{pod=~"{pods}"}}[2m])) by (pod)',
+    "network":   'sum(rate(container_network_receive_bytes_total{{pod=~"{pods}"}}[2m]) + rate(container_network_transmit_bytes_total{{pod=~"{pods}"}}[2m])) by (pod) / 1048576',
+}
+
 # ── Models ─────────────────────────────────────────────────────────
 class VerificationRequest(BaseModel):
     execution_id: str
@@ -74,36 +83,38 @@ def health():
     }
 
 # ── Query Prometheus Metrics ──────────────────────────────────────
-async def query_metrics(metric_name: str, pods: List[str], duration_minutes: int = 5) -> Dict:
-    """Query Prometheus for metric data"""
+async def query_metrics(metric_name: str, pods: List[str]) -> Dict:
+    """Query Prometheus for current metric values across affected pods."""
     try:
+        pod_regex = "|".join(pods[:5])
+        expr_template = _METRIC_QUERIES.get(
+            metric_name,
+            'avg(rate(container_cpu_usage_seconds_total{{pod=~"{pods}"}}[2m])) by (pod)'
+        )
+        query = expr_template.format(pods=pod_regex)
         async with httpx.AsyncClient(timeout=10) as client:
-            # Build PromQL query for pods
-            pod_filter = "|".join(pods[:5])  # Limit to 5 pods
-            query = f"avg(rate({metric_name}[5m])) by (pod_name) and on(pod_name) pod_name=~\"{pod_filter}\""
-            
-            response = await client.get(
-                f"{PROMETHEUS_URL}/api/v1/query",
-                params={"query": query}
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("data", {}).get("result"):
-                    values = [float(v[1]) for v in data["data"]["result"] if len(v) > 1]
-                    if values:
-                        return {
-                            "mean": statistics.mean(values),
-                            "median": statistics.median(values),
-                            "stdev": statistics.stdev(values) if len(values) > 1 else 0,
-                            "min": min(values),
-                            "max": max(values),
-                            "count": len(values)
-                        }
+            r = await client.get(f"{PROMETHEUS_URL}/api/v1/query", params={"query": query})
+            if r.status_code != 200:
+                logger.warning(f"Prometheus returned {r.status_code} for query: {query}")
+                return {}
+            result = r.json().get("data", {}).get("result", [])
+            if not result:
+                logger.warning(f"No Prometheus data for metric={metric_name} pods={pods}")
+                return {}
+            values = [float(item["value"][1]) for item in result if len(item.get("value", [])) > 1]
+            if not values:
+                return {}
+            return {
+                "mean":   statistics.mean(values),
+                "median": statistics.median(values),
+                "stdev":  statistics.stdev(values) if len(values) > 1 else 0.0,
+                "min":    min(values),
+                "max":    max(values),
+                "count":  len(values),
+            }
     except Exception as e:
         logger.error(f"Failed to query Prometheus: {e}")
-    
-    return {}
+        return {}
 
 # ── Calculate Z-Score ────────────────────────────────────────────
 def calculate_z_score(value: float, mean: float, stdev: float) -> float:
@@ -113,6 +124,14 @@ def calculate_z_score(value: float, mean: float, stdev: float) -> float:
     return (value - mean) / stdev
 
 # ── Verify Remediation ──────────────────────────────────────────
+@app.get("/pre-metrics")
+async def get_pre_metrics(metric: str, pods: str):
+    """Fetch current metric snapshot before remediation executes."""
+    pod_list = [p.strip() for p in pods.split(",") if p.strip()]
+    data = await query_metrics(metric, pod_list)
+    return {"metric": metric, "pods": pod_list, "snapshot": data}
+
+
 @app.post("/verify", response_model=VerificationResult)
 async def verify_remediation(request: VerificationRequest):
     """Verify remediation effectiveness"""
@@ -146,27 +165,14 @@ async def verify_remediation(request: VerificationRequest):
             duration_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
         )
     
-    # Calculate improvement
-    pre_mean = request.pre_metrics.get("mean", 0)
-    post_mean = post_metrics.get("mean", 0)
-    
-    if pre_mean > 0:
-        improvement_percent = ((pre_mean - post_mean) / pre_mean) * 100
-    else:
-        improvement_percent = 0
-    
-    # Calculate Z-score change
-    pre_z = calculate_z_score(
-        pre_mean,
-        request.pre_metrics.get("mean", 0),
-        request.pre_metrics.get("stdev", 1)
-    )
-    post_z = calculate_z_score(
-        post_mean,
-        post_metrics.get("mean", 0),
-        post_metrics.get("stdev", 1)
-    )
-    z_score_delta = pre_z - post_z
+    pre_mean  = request.pre_metrics.get("mean", 0.0)
+    pre_stdev = request.pre_metrics.get("stdev", 1.0) or 1.0
+    post_mean = post_metrics.get("mean", 0.0)
+
+    improvement_percent = ((pre_mean - post_mean) / pre_mean * 100) if pre_mean > 0 else 0.0
+
+    # Z-score delta: how many pre-stdev units did the mean drop?
+    z_score_delta = (pre_mean - post_mean) / pre_stdev
     
     # Determine if remediation was successful
     success = (
@@ -174,15 +180,13 @@ async def verify_remediation(request: VerificationRequest):
         z_score_delta >= Z_SCORE_IMPROVEMENT_TARGET
     )
     
-    details = f"""
-    Pre-remediation mean: {pre_mean:.2f}
-    Post-remediation mean: {post_mean:.2f}
-    Improvement: {improvement_percent:.1f}%
-    Pre Z-score: {pre_z:.2f}
-    Post Z-score: {post_z:.2f}
-    Z-score improvement: {z_score_delta:.2f}
-    Success: {success}
-    """
+    details = (
+        f"Pre-remediation mean: {pre_mean:.2f} (stdev: {pre_stdev:.2f})\n"
+        f"Post-remediation mean: {post_mean:.2f}\n"
+        f"Improvement: {improvement_percent:.1f}%\n"
+        f"Z-score delta: {z_score_delta:.2f}\n"
+        f"Success: {success}"
+    )
     
     result = VerificationResult(
         verification_id=verification_id,

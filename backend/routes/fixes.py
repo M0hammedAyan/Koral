@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from backend.services.processor import fix_history, store_fix_history
 from backend.auth import validate_api_key
+from backend.audit import write_audit
 from typing import Optional
 import logging
 
@@ -79,6 +80,8 @@ def record_fix(entry: FixHistoryEntry):
             kubectl_command=entry.kubectl_command or "",
             error_message=entry.error_message or ""
         )
+        write_audit("fix.recorded", entry.applied_by, entry.incident_id,
+                    {"fix_type": entry.fix_type, "success": entry.success})
         return {"status": "recorded", "incident_id": entry.incident_id}
     except Exception as e:
         logger.error(f"Error recording fix: {e}")

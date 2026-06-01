@@ -147,6 +147,20 @@ def init_db():
                     z_score_delta REAL, verification_details TEXT,
                     duration_ms INTEGER, created_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS fix_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    incident_id TEXT, fix_type TEXT, fix_description TEXT,
+                    applied_by TEXT, success INTEGER, error_message TEXT,
+                    kubectl_command TEXT, timestamp TEXT, created_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS audit (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    actor TEXT,
+                    target TEXT,
+                    payload TEXT,
+                    created_at TEXT NOT NULL
+                );
             """)
         else:
             cursor.execute("SELECT 1")

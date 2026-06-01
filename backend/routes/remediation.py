@@ -10,6 +10,7 @@ from typing import Optional, Dict
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from backend.auth import validate_api_key
+from backend.audit import write_audit
 import logging
 
 from backend.database_remediation import (
@@ -24,12 +25,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/remediation", tags=["remediation"], dependencies=[Depends(validate_api_key)])
 
 # ── Configuration ──────────────────────────────────────────────────
-REMEDIATION_PLANNER_URL = os.getenv("REMEDIATION_PLANNER_URL", "http://remediation-planner:8007")
-APPROVAL_ENGINE_URL = os.getenv("APPROVAL_ENGINE_URL", "http://approval-engine:8008")
-SANDBOX_EXECUTOR_URL = os.getenv("SANDBOX_EXECUTOR_URL", "http://sandbox-executor:8009")
-VERIFICATION_ENGINE_URL = os.getenv("VERIFICATION_ENGINE_URL", "http://verification-engine:8010")
-NOTIFIER_URL = os.getenv("NOTIFIER_URL", "http://notifier:8011")
-REMEDIATION_ENABLED = os.getenv("REMEDIATION_ENABLED", "false").lower() == "true"
+REMEDIATION_PLANNER_URL  = os.getenv("REMEDIATION_PLANNER_URL", "http://remediation-planner:8007")
+APPROVAL_ENGINE_URL      = os.getenv("APPROVAL_ENGINE_URL", "http://approval-engine:8008")
+SANDBOX_EXECUTOR_URL     = os.getenv("SANDBOX_EXECUTOR_URL", "http://sandbox-executor:8009")
+VERIFICATION_ENGINE_URL  = os.getenv("VERIFICATION_ENGINE_URL", "http://verification-engine:8010")
+NOTIFIER_URL             = os.getenv("NOTIFIER_URL", "http://notifier:8011")
+REMEDIATION_ENABLED      = os.getenv("REMEDIATION_ENABLED", "false").lower() == "true"
+
+
+async def _fetch_pre_metrics(metric: str, pods: list) -> dict:
+    """Fetch baseline metrics from verification engine before execution."""
+    try:
+        pods_param = ",".join(pods[:5])
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{VERIFICATION_ENGINE_URL}/pre-metrics",
+                params={"metric": metric, "pods": pods_param},
+            )
+            if r.status_code == 200:
+                return r.json().get("snapshot", {})
+    except Exception as e:
+        logger.warning(f"Could not fetch pre-metrics: {e}")
+    return {}
 
 # ── Models ─────────────────────────────────────────────────────────
 class RemediationPlanCreate(BaseModel):
@@ -151,6 +168,8 @@ async def request_approval(plan_id: str):
             
             if response.status_code == 200:
                 approval = response.json()
+                write_audit("remediation.approval_requested", "system", plan_id,
+                            {"approval_id": approval.get("approval_id"), "severity": plan.get("severity")})
                 logger.info(f"Approval requested: {approval['approval_id']}")
                 return approval
             else:
@@ -175,10 +194,16 @@ async def execute_remediation(plan_id: str, approval_id: str):
             approval_check = await client.get(
                 f"{APPROVAL_ENGINE_URL}/status/{approval_id}"
             )
-            
             if approval_check.status_code != 200 or approval_check.json().get("status") != "approved":
                 raise HTTPException(status_code=403, detail="Plan not approved")
-            
+
+            # Collect pre-execution baseline metrics
+            pre_metrics = await _fetch_pre_metrics(
+                plan.get("primary_metric", plan.get("recommended_action", "cpu")),
+                plan["affected_pods"],
+            )
+            logger.info(f"Pre-metrics for {plan_id}: {pre_metrics}")
+
             # Execute command
             response = await client.post(
                 f"{SANDBOX_EXECUTOR_URL}/execute",
@@ -188,13 +213,17 @@ async def execute_remediation(plan_id: str, approval_id: str):
                     "incident_id": plan["incident_id"],
                     "command": plan["recommended_action"],
                     "parameters": plan["parameters"],
-                    "affected_pods": plan["affected_pods"]
+                    "affected_pods": plan["affected_pods"],
                 }
             )
-            
             if response.status_code == 200:
                 execution = response.json()
+                execution["pre_metrics"] = pre_metrics
                 remediation_executions[execution["execution_id"]] = execution
+                write_audit("remediation.executed", "system", plan_id,
+                            {"execution_id": execution["execution_id"],
+                             "command": plan.get("recommended_action"),
+                             "affected_pods": plan.get("affected_pods")})
                 logger.info(f"Executed remediation: {execution['execution_id']}")
                 return execution
             else:
@@ -227,13 +256,17 @@ async def verify_remediation(execution_id: str, plan_id: str, primary_metric: st
                     "incident_id": plan["incident_id"],
                     "affected_pods": plan["affected_pods"],
                     "primary_metric": primary_metric,
-                    "pre_metrics": {"mean": 0.0, "stdev": 1.0}  # Placeholder
+                    "pre_metrics": execution.get("pre_metrics") or {},
                 }
             )
             
             if response.status_code == 200:
                 verification = response.json()
                 remediation_verifications[verification["verification_id"]] = verification
+                write_audit("remediation.verified", "system", plan_id,
+                            {"verification_id": verification["verification_id"],
+                             "status": verification.get("verification_status"),
+                             "improvement_percent": verification.get("improvement_percent")})
                 logger.info(f"Verification complete: {verification['verification_id']}")
                 return verification
             else:
@@ -368,10 +401,15 @@ async def approve_approval(approval_id: str, payload: ApprovalActionRequest):
                 },
             )
             if response.status_code < 400:
-                return response.json() if response.content else {"status": "approved", "approval_id": approval_id}
+                result = response.json() if response.content else {"status": "approved", "approval_id": approval_id}
+                write_audit("remediation.approved", payload.approver_email or "dashboard", approval_id,
+                            {"reason": payload.reason})
+                return result
     except Exception as e:
         logger.debug(f"Approval engine unavailable for approve {approval_id}: {e}")
 
+    write_audit("remediation.approved", payload.approver_email or "dashboard", approval_id,
+                {"source": "backend-fallback"})
     return {"status": "approved", "approval_id": approval_id, "source": "backend-fallback"}
 
 
@@ -387,8 +425,13 @@ async def reject_approval(approval_id: str, payload: ApprovalActionRequest):
                 },
             )
             if response.status_code < 400:
-                return response.json() if response.content else {"status": "rejected", "approval_id": approval_id}
+                result = response.json() if response.content else {"status": "rejected", "approval_id": approval_id}
+                write_audit("remediation.rejected", payload.approver_email or "dashboard", approval_id,
+                            {"reason": payload.reason})
+                return result
     except Exception as e:
         logger.debug(f"Approval engine unavailable for reject {approval_id}: {e}")
 
+    write_audit("remediation.rejected", payload.approver_email or "dashboard", approval_id,
+                {"source": "backend-fallback"})
     return {"status": "rejected", "approval_id": approval_id, "source": "backend-fallback"}

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: koral-grafana-dashboards
+  namespace: koral-system
+  labels:
+    grafana_dashboard: "1"
+binaryData: {}
+data:
+  koral-ops-overview.json: |
+    # loaded from infra/grafana/dashboards/koral-ops-overview.json at deploy time
+  koral-dashboard.json: |
+    # loaded from infra/grafana/dashboards/koral-dashboard.json at deploy time
+  koral-incident-analysis.json: |
+    # loaded from infra/grafana/dashboards/koral-incident-analysis.json at deploy time
+  koral-autonomous-remediation.json: |
+    # loaded from infra/grafana/dashboards/koral-autonomous-remediation.json at deploy time

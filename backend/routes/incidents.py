@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from backend.services.processor import incidents
 from backend.auth import validate_api_key
+from backend.audit import write_audit
 import logging
 
 logger = logging.getLogger(__name__)
