@@ -1,7 +1,12 @@
 import axios from 'axios';
 import { Incident, Graph, Anomaly } from '../types';
 
-const client = axios.create({ baseURL: '' });
+const API_KEY = process.env.REACT_APP_API_KEY || '';
+
+const client = axios.create({
+  baseURL: '',
+  headers: API_KEY ? { 'X-API-Key': API_KEY } : {},
+});
 
 export const api = {
   getIncidents: async (): Promise<Incident[]> => {

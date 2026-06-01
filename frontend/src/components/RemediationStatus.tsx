@@ -43,29 +43,65 @@ export const RemediationStatus: React.FC = () => {
 
   const loadMetrics = async () => {
     try {
-      const response = await axios.get('/remediation/status');
+      const response = await axios.get('/remediation/status', { timeout: 5000 });
       setMetrics({
         ...response.data,
         success_rate: response.data.success_rate || 0.85,
         avg_remediation_time_ms: response.data.avg_remediation_time_ms || 5000
       });
     } catch (err) {
-      setError('Failed to load remediation metrics');
+      console.error('Failed to load remediation metrics:', err);
+      setMetrics({ status: 'unavailable', enabled: false, plan_count: 0, execution_count: 0, success_rate: 0, avg_remediation_time_ms: 0 });
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadOperations = async () => {
     try {
-      const response = await axios.get('/remediation/operations').catch(() => ({ data: [] }));
-      setOperations(response.data);
+      // Try to load plans (which contain operation info)
+      const plansResponse = await axios.get('/remediation/plans', { timeout: 5000 });
+      
+      // Handle different response formats
+      let plans: any[] = [];
+      if (Array.isArray(plansResponse.data)) {
+        plans = plansResponse.data;
+      } else if (plansResponse.data?.plans && Array.isArray(plansResponse.data.plans)) {
+        plans = plansResponse.data.plans;
+      } else if (typeof plansResponse.data === 'object') {
+        // If it's an object but not the expected structure, try to extract arrays
+        const foundArray = Object.values(plansResponse.data).find(v => Array.isArray(v));
+        plans = Array.isArray(foundArray) ? foundArray : [];
+      }
+      
+      // Ensure plans is always an array
+      if (!Array.isArray(plans)) {
+        console.warn('Plans response is not an array:', plansResponse.data);
+        plans = [];
+      }
+      
+      // Transform plans into operations format
+      const ops: RemediationOperation[] = plans.map((plan: any) => ({
+        plan_id: plan?.plan_id || 'unknown',
+        incident_id: plan?.incident_id || 'unknown',
+        status: plan?.status || 'pending',
+        recommended_action: plan?.recommended_action || 'N/A',
+        severity: plan?.severity || 'medium',
+        created_at: plan?.created_at || new Date().toISOString(),
+        updated_at: plan?.updated_at || new Date().toISOString(),
+      }));
+      
+      setOperations(ops);
       setLoading(false);
     } catch (err) {
-      setError('Failed to load operations');
+      console.error('Failed to load operations:', err);
+      // Set empty operations instead of erroring
+      setOperations([]);
       setLoading(false);
     }
   };
 
-  const filteredOperations = operations.filter(op => {
+  const filteredOperations = (Array.isArray(operations) ? operations : []).filter(op => {
     if (filter === 'all') return true;
     if (filter === 'pending') return op.status === 'pending';
     if (filter === 'executing') return op.execution_status === 'executing' || op.status === 'approved';

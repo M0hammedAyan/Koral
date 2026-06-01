@@ -56,7 +56,7 @@ def _observe_pool_metrics() -> None:
 if DB_TYPE == "sqlite":
     import sqlite3
     
-    DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "koral.db"))
+    DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "koral.db"))
     
     def _get_db():
         db_dir = os.path.dirname(DB_PATH)
@@ -98,7 +98,58 @@ def init_db():
     conn = _get_db()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT 1")
+        if DB_TYPE == "sqlite":
+            cursor.executescript("""
+                CREATE TABLE IF NOT EXISTS anomalies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT, pod TEXT, namespace TEXT, metric TEXT,
+                    value REAL, unit TEXT, z_score REAL, is_anomaly INTEGER,
+                    window_size INTEGER, source TEXT, created_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS incidents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    incident_id TEXT UNIQUE, timestamp TEXT, namespace TEXT,
+                    severity TEXT, root_cause TEXT, summary TEXT,
+                    affected_pods TEXT, primary_metric TEXT, confidence REAL,
+                    evidence_count INTEGER, ai_explanation TEXT, ai_action TEXT,
+                    ai_model TEXT, created_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS remediation_plans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    plan_id TEXT UNIQUE, incident_id TEXT NOT NULL,
+                    severity TEXT, root_cause TEXT, recommended_action TEXT,
+                    confidence REAL, affected_pods TEXT, parameters TEXT,
+                    ai_reasoning TEXT, status TEXT DEFAULT 'pending',
+                    created_at TEXT, expires_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS approval_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    approval_id TEXT UNIQUE, plan_id TEXT NOT NULL,
+                    incident_id TEXT NOT NULL, requested_by TEXT, approved_by TEXT,
+                    approval_status TEXT, approval_reason TEXT, email_sent_at TEXT,
+                    email_opened_at TEXT, response_timestamp TEXT, created_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS execution_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    execution_id TEXT UNIQUE, plan_id TEXT NOT NULL,
+                    incident_id TEXT NOT NULL, command TEXT, parameters TEXT,
+                    execution_status TEXT, start_time TEXT, end_time TEXT,
+                    duration_ms INTEGER, stdout TEXT, stderr TEXT,
+                    exit_code INTEGER, blast_radius INTEGER, pod_failures TEXT,
+                    created_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS verification_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    verification_id TEXT UNIQUE, execution_id TEXT NOT NULL,
+                    plan_id TEXT NOT NULL, incident_id TEXT NOT NULL,
+                    verification_status TEXT, pre_metrics TEXT, post_metrics TEXT,
+                    improvement_percent REAL, anomaly_resolved INTEGER,
+                    z_score_delta REAL, verification_details TEXT,
+                    duration_ms INTEGER, created_at TEXT
+                );
+            """)
+        else:
+            cursor.execute("SELECT 1")
     finally:
         conn.commit()
         conn.close()

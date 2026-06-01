@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from backend.services.processor import fix_history, store_fix_history
+from backend.auth import validate_api_key
 from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(validate_api_key)])
 
 
 class FixHistoryEntry(BaseModel):

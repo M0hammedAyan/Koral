@@ -1,8 +1,9 @@
 import os
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from backend.auth import validate_api_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(validate_api_key)])
 AI_ENGINE_URL = os.getenv("AI_ENGINE_URL", "http://ai-engine:8006")
 
 

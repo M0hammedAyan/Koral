@@ -3,20 +3,20 @@
   flex-direction: column;
   height: 100%;
   gap: 1rem;
+  padding: 1rem 0;
 }
 
 .approval-container {
   display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 1.5rem;
-  height: 100%;
+  grid-template-columns: 280px 1fr;
+  gap: 1.25rem;
   min-height: 600px;
 }
 
 .approval-list {
-  background: rgba(30, 27, 75, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.5rem;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 12px;
   padding: 1rem;
   overflow-y: auto;
   display: flex;
@@ -24,66 +24,64 @@
 }
 
 .approval-list h3 {
-  margin: 0 0 1rem 0;
-  color: #e2e8f0;
-  font-size: 1rem;
+  margin: 0 0 0.75rem 0;
+  color: #f1f5f9;
+  font-size: 0.95rem;
+  font-weight: 600;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  border-bottom: 1px solid #475569;
 }
 
 .approval-item {
   padding: 0.75rem;
   margin-bottom: 0.5rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  border-radius: 0.375rem;
+  background: #0f172a;
+  border: 1px solid #475569;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .approval-item:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.4);
-  transform: translateX(4px);
+  border-color: #0ea5e9;
+  background: #334155;
+  transform: translateX(3px);
 }
 
 .approval-item.active {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+  background: rgba(14, 165, 233, 0.1);
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
 }
 
 .approval-item-header {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
   flex-wrap: wrap;
 }
 
 .severity-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.7rem;
-  font-weight: bold;
-  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
 }
 
 .action-badge {
-  padding: 0.25rem 0.5rem;
-  background: rgba(148, 163, 184, 0.2);
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(71, 85, 105, 0.5);
+  border-radius: 4px;
+  font-size: 0.72rem;
   color: #cbd5e1;
-}
-
-.approval-item-details {
-  display: flex;
-  gap: 0.5rem;
 }
 
 .approval-item-details small {
   color: #94a3b8;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  font-family: monospace;
 }
 
 .approval-empty {
@@ -94,24 +92,29 @@
   height: 100%;
   min-height: 300px;
   text-align: center;
-  color: #94a3b8;
+  color: #cbd5e1;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 12px;
+  gap: 0.5rem;
 }
 
 .approval-empty p {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   margin: 0;
-  color: #4caf50;
+  color: #10b981;
+  font-weight: 600;
 }
 
 .approval-empty small {
   color: #64748b;
-  margin-top: 0.5rem;
+  font-size: 0.85rem;
 }
 
 .approval-details {
-  background: rgba(30, 27, 75, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.5rem;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 12px;
   padding: 1.5rem;
   overflow-y: auto;
   display: flex;
@@ -120,107 +123,110 @@
 }
 
 .details-header {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  border-bottom: 1px solid #475569;
   padding-bottom: 0.75rem;
-  margin-bottom: 0.5rem;
 }
 
 .details-header h3 {
-  margin: 0 0 0.5rem 0;
-  color: #e2e8f0;
+  margin: 0 0 0.4rem 0;
+  color: #f1f5f9;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .details-header small {
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-family: monospace;
 }
 
 .detail-section {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .detail-section label {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: #94a3b8;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
 }
 
 .detail-section p {
   margin: 0;
-  color: #e2e8f0;
-  padding: 0.75rem;
-  background: rgba(15, 23, 42, 0.5);
-  border-left: 2px solid rgba(59, 130, 246, 0.5);
-  border-radius: 0.25rem;
+  color: #f1f5f9;
+  padding: 0.65rem 0.75rem;
+  background: #0f172a;
+  border-left: 2px solid #0ea5e9;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .severity-badge.large {
   display: inline-block;
-  padding: 0.75rem 1rem;
-  border-radius: 0.375rem;
-  font-weight: bold;
-  color: white;
-  min-width: 120px;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  font-weight: 700;
+  color: #fff;
+  min-width: 100px;
   text-align: center;
+  font-size: 0.85rem;
 }
 
 .confidence-bar {
   width: 100%;
-  height: 24px;
-  background: rgba(15, 23, 42, 0.5);
-  border-radius: 0.375rem;
+  height: 10px;
+  background: #0f172a;
+  border-radius: 5px;
   overflow: hidden;
-  position: relative;
+  border: 1px solid #475569;
 }
 
 .confidence-fill {
   height: 100%;
-  border-radius: 0.375rem;
+  border-radius: 5px;
   transition: width 0.3s ease;
 }
 
 .detail-section > span {
-  color: #60a5fa;
+  color: #0ea5e9;
   font-weight: 600;
   font-size: 0.9rem;
-  align-self: flex-start;
 }
 
 .pods-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .pod-badge {
-  background: rgba(148, 163, 184, 0.2);
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  padding: 0.35rem 0.65rem;
-  border-radius: 0.25rem;
-  font-size: 0.8rem;
+  background: #0f172a;
+  border: 1px solid #475569;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
   color: #cbd5e1;
   font-family: monospace;
 }
 
 .parameters-box,
 .reasoning-box {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.375rem;
+  background: #0f172a;
+  border: 1px solid #475569;
+  border-radius: 6px;
   padding: 0.75rem;
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
 }
 
 .parameters-box pre,
 .reasoning-box pre {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #cbd5e1;
   font-family: 'Courier New', monospace;
   white-space: pre-wrap;
@@ -229,117 +235,98 @@
 
 .detail-section input,
 .detail-section textarea {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  color: #e2e8f0;
-  padding: 0.75rem;
-  border-radius: 0.375rem;
+  background: #0f172a;
+  border: 1px solid #475569;
+  color: #f1f5f9;
+  padding: 0.65rem 0.75rem;
+  border-radius: 6px;
   font-family: inherit;
   font-size: 0.9rem;
+  transition: border-color 0.2s ease;
 }
 
 .detail-section input:focus,
 .detail-section textarea:focus {
   outline: none;
-  border-color: #60a5fa;
-  background: rgba(59, 130, 246, 0.1);
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
 }
 
 .detail-section input:disabled,
 .detail-section textarea:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .error-message {
-  background: rgba(244, 67, 54, 0.1);
-  border: 1px solid rgba(244, 67, 54, 0.5);
-  color: #ef5350;
-  padding: 0.75rem;
-  border-radius: 0.375rem;
-  font-size: 0.9rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 0.65rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
 }
 
 .approval-actions {
   display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
   padding-top: 1rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  border-top: 1px solid #475569;
 }
 
 .btn {
   flex: 1;
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 1rem;
   border: none;
-  border-radius: 0.375rem;
+  border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 0.95rem;
+  transition: all 0.2s ease;
+  font-size: 0.88rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btn-approve {
-  background: rgba(76, 175, 80, 0.2);
-  border: 1px solid rgba(76, 175, 80, 0.5);
-  color: #81c784;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #10b981;
 }
 
 .btn-approve:hover:not(:disabled) {
-  background: rgba(76, 175, 80, 0.3);
-  border-color: #81c784;
-  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
 }
 
 .btn-reject {
-  background: rgba(244, 67, 54, 0.2);
-  border: 1px solid rgba(244, 67, 54, 0.5);
-  color: #ef5350;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #ef4444;
 }
 
 .btn-reject:hover:not(:disabled) {
-  background: rgba(244, 67, 54, 0.3);
-  border-color: #ef5350;
-  box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.1);
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
 }
 
-/* Scrollbar styling */
 .approval-list::-webkit-scrollbar,
-.approval-details::-webkit-scrollbar {
-  width: 6px;
-}
-
+.approval-details::-webkit-scrollbar { width: 6px; }
 .approval-list::-webkit-scrollbar-track,
-.approval-details::-webkit-scrollbar-track {
-  background: rgba(148, 163, 184, 0.1);
-}
-
+.approval-details::-webkit-scrollbar-track { background: #0f172a; }
 .approval-list::-webkit-scrollbar-thumb,
-.approval-details::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
-  border-radius: 3px;
-}
-
+.approval-details::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
 .approval-list::-webkit-scrollbar-thumb:hover,
-.approval-details::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.5);
-}
+.approval-details::-webkit-scrollbar-thumb:hover { background: #334155; }
 
-/* Responsive design */
 @media (max-width: 1024px) {
-  .approval-container {
-    grid-template-columns: 1fr;
-  }
-
-  .approval-list {
-    max-height: 200px;
-  }
+  .approval-container { grid-template-columns: 1fr; }
+  .approval-list { max-height: 220px; }
 }

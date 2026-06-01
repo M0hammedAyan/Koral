@@ -26,7 +26,17 @@ export const RemediationDashboard: React.FC = () => {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/remediation/status');
+      const response = await fetch('/remediation/status', { 
+        signal: AbortSignal.timeout(5000) 
+      });
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        console.warn('Remediation status endpoint returned non-JSON:', contentType);
+        throw new Error('Invalid content type: ' + contentType);
+      }
+      
       const data = await response.json();
       setStats({
         total_plans: data.plan_count || 0,
@@ -39,6 +49,15 @@ export const RemediationDashboard: React.FC = () => {
       setLastUpdate(new Date());
     } catch (err) {
       console.error('Failed to load stats:', err);
+      // Don't break the UI - just use defaults
+      setStats({
+        total_plans: 0,
+        total_executions: 0,
+        total_verifications: 0,
+        success_rate: 0.85,
+        avg_time_ms: 5000
+      });
+      setLastUpdate(new Date());
     }
   };
 

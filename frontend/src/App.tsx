@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Dashboard } from './pages/Dashboard';
 import { Incidents } from './pages/Incidents';
 import { IncidentDetails } from './pages/IncidentDetails';
@@ -51,7 +52,16 @@ function App() {
               <Route path="/incident/:id" element={<IncidentDetails />} />
               <Route path="/graph" element={<DependencyGraph />} />
               <Route path="/fixes" element={<FixHistory />} />
-              <Route path="/remediation" element={<RemediationDashboard />} />
+              <Route path="/remediation" element={
+                <ErrorBoundary fallback={
+                  <div style={{ padding: '2rem', color: '#e2e8f0' }}>
+                    <h2>Remediation Page Temporarily Unavailable</h2>
+                    <p>Please try again in a moment or return to the dashboard.</p>
+                  </div>
+                }>
+                  <RemediationDashboard />
+                </ErrorBoundary>
+              } />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>

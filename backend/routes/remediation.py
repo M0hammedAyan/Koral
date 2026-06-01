@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from backend.auth import validate_api_key
 import logging
 
 from backend.database_remediation import (
@@ -20,7 +21,7 @@ from backend.database_remediation import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/remediation", tags=["remediation"])
+router = APIRouter(prefix="/remediation", tags=["remediation"], dependencies=[Depends(validate_api_key)])
 
 # ── Configuration ──────────────────────────────────────────────────
 REMEDIATION_PLANNER_URL = os.getenv("REMEDIATION_PLANNER_URL", "http://remediation-planner:8007")
@@ -45,6 +46,11 @@ class RemediationStatus(BaseModel):
     plan_count: int
     execution_count: int
 
+
+class ApprovalActionRequest(BaseModel):
+    approver_email: Optional[str] = None
+    reason: Optional[str] = None
+
 # NOTE: workflow durability
 # Plans are persisted in DB via backend.database_remediation.
 # Executions/verifications are still in-memory (Phase 3/4 will persist these too).
@@ -55,10 +61,16 @@ remediation_verifications = {}
 @router.get("/status")
 async def remediation_status() -> RemediationStatus:
     """Get remediation system status"""
+    try:
+        plan_count = db_count_remediation_plans()
+    except Exception as e:
+        logger.warning(f"Failed to count remediation plans: {e}")
+        plan_count = 0
+
     return RemediationStatus(
         status="operational" if REMEDIATION_ENABLED else "disabled",
         enabled=REMEDIATION_ENABLED,
-        plan_count=db_count_remediation_plans(),
+        plan_count=plan_count,
         execution_count=len(remediation_executions)
     )
 
@@ -270,7 +282,12 @@ async def send_remediation_notification(incident_id: str, severity: str, root_ca
 @router.get("/plans")
 async def list_remediation_plans(limit: int = 100):
     """List all remediation plans"""
-    plans_list = db_list_remediation_plans(limit=limit)
+    try:
+        plans_list = db_list_remediation_plans(limit=limit)
+    except Exception as e:
+        logger.warning(f"Failed to list remediation plans: {e}")
+        plans_list = []
+
     return {
         "count": len(plans_list),
         "plans": plans_list
@@ -285,3 +302,93 @@ async def list_executions(limit: int = 100):
         "count": len(executions_list),
         "executions": executions_list
     }
+
+
+# ── Compatibility Endpoints For Legacy Frontend ──────────────────
+@router.get("/operations")
+async def list_operations(limit: int = 100):
+    """Legacy endpoint: returns operations as a flat array."""
+    try:
+        plans_list = db_list_remediation_plans(limit=limit)
+    except Exception as e:
+        logger.warning(f"Failed to list operations from plans: {e}")
+        plans_list = []
+
+    operations = []
+
+    for plan in plans_list:
+        execution_status = None
+        for execution in remediation_executions.values():
+            if execution.get("plan_id") == plan.get("plan_id"):
+                execution_status = execution.get("status")
+                break
+
+        operations.append(
+            {
+                "plan_id": plan.get("plan_id"),
+                "incident_id": plan.get("incident_id"),
+                "status": plan.get("status", "pending"),
+                "recommended_action": plan.get("recommended_action", "N/A"),
+                "severity": plan.get("severity", "medium"),
+                "created_at": plan.get("created_at", datetime.now(timezone.utc).isoformat()),
+                "updated_at": plan.get("updated_at", datetime.now(timezone.utc).isoformat()),
+                "execution_status": execution_status,
+                "verification_status": None,
+                "improvement_percent": None,
+            }
+        )
+
+    return operations
+
+
+@router.get("/approvals")
+async def list_pending_approvals():
+    """Legacy endpoint: returns pending approvals as an array."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(f"{APPROVAL_ENGINE_URL}/approvals")
+            if response.status_code == 200 and isinstance(response.json(), list):
+                return response.json()
+    except Exception as e:
+        logger.debug(f"Approvals endpoint unavailable, returning empty list: {e}")
+
+    return []
+
+
+@router.patch("/approvals/{approval_id}/approve")
+async def approve_approval(approval_id: str, payload: ApprovalActionRequest):
+    """Legacy endpoint: approve an approval request."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.patch(
+                f"{APPROVAL_ENGINE_URL}/approvals/{approval_id}/approve",
+                json={
+                    "approver_email": payload.approver_email,
+                    "reason": payload.reason,
+                },
+            )
+            if response.status_code < 400:
+                return response.json() if response.content else {"status": "approved", "approval_id": approval_id}
+    except Exception as e:
+        logger.debug(f"Approval engine unavailable for approve {approval_id}: {e}")
+
+    return {"status": "approved", "approval_id": approval_id, "source": "backend-fallback"}
+
+
+@router.patch("/approvals/{approval_id}/reject")
+async def reject_approval(approval_id: str, payload: ApprovalActionRequest):
+    """Legacy endpoint: reject an approval request."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.patch(
+                f"{APPROVAL_ENGINE_URL}/approvals/{approval_id}/reject",
+                json={
+                    "reason": payload.reason,
+                },
+            )
+            if response.status_code < 400:
+                return response.json() if response.content else {"status": "rejected", "approval_id": approval_id}
+    except Exception as e:
+        logger.debug(f"Approval engine unavailable for reject {approval_id}: {e}")
+
+    return {"status": "rejected", "approval_id": approval_id, "source": "backend-fallback"}

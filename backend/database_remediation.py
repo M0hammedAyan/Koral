@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from backend import database as _database
 
 DB_TYPE = _database.DB_TYPE
+_DB_PATH = _database.DB_PATH if DB_TYPE == "sqlite" else None
 
 def _json_dumps_safe(value: Any) -> str:
     if value is None:
@@ -38,8 +39,7 @@ def init_remediation_db():
     """Initialize remediation-specific database tables"""
     if DB_TYPE == "sqlite":
         import sqlite3
-        DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "koral.db"))
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_DB_PATH)
         cursor = conn.cursor()
         
         cursor.executescript("""
@@ -213,15 +213,14 @@ def init_remediation_db():
         conn.close()
 
 
-def add_remediation_plan(plan_id, incident_id, severity, root_cause, recommended_action, 
+def add_remediation_plan(plan_id, incident_id, severity, root_cause, recommended_action,
                          confidence, affected_pods, parameters, ai_reasoning):
     """Add new remediation plan"""
     affected_pods = _json_dumps_safe(affected_pods)
     parameters = _json_dumps_safe(parameters)
     if DB_TYPE == "sqlite":
         import sqlite3
-        DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "koral.db"))
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_DB_PATH)
         cursor = conn.cursor()
         now = datetime.now(timezone.utc).isoformat()
         cursor.execute("""
@@ -252,8 +251,7 @@ def get_remediation_plan(plan_id):
     """Get remediation plan by ID"""
     if DB_TYPE == "sqlite":
         import sqlite3
-        DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "koral.db"))
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM remediation_plans WHERE plan_id=?", (plan_id,))
@@ -284,8 +282,7 @@ def list_remediation_plans(limit: int = 100) -> List[Dict[str, Any]]:
     limit = max(1, min(int(limit), 500))
     if DB_TYPE == "sqlite":
         import sqlite3
-        DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "koral.db"))
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM remediation_plans ORDER BY id DESC LIMIT ?", (limit,))
@@ -315,8 +312,7 @@ def count_remediation_plans() -> int:
     """Return total count of remediation plans."""
     if DB_TYPE == "sqlite":
         import sqlite3
-        DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "koral.db"))
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(1) FROM remediation_plans")
         (n,) = cursor.fetchone()

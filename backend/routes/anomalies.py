@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 try:
     from pydantic import field_validator
@@ -6,10 +6,11 @@ except ImportError:
     from pydantic import validator as field_validator
 from backend.websocket.manager import manager
 from backend.services.processor import process_anomaly, anomalies
+from backend.auth import validate_api_key
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(validate_api_key)])
 
 
 class AnomalyPayload(BaseModel):

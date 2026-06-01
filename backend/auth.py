@@ -1,8 +1,5 @@
-"""
-Authentication utilities for KORAL Backend
-Supports API key and JWT authentication
-"""
 import os
+import hmac
 from fastapi import HTTPException, Request, Header
 from typing import Optional
 try:
@@ -21,41 +18,30 @@ except Exception:
             return {"sub": "development"}
     jwt = _DummyJWT()
 from datetime import datetime, timedelta
+import logging
 
-# ── Configuration ─────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
 API_KEY_HEADER = "X-API-Key"
 JWT_SECRET = os.getenv("JWT_SECRET", "change-this-in-production")
 JWT_ALGORITHM = "HS256"
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
-
-# For development: set DISABLE_AUTH=true in env vars
 DISABLE_AUTH = os.getenv("DISABLE_AUTH", "false").lower() == "true"
+
+if not DISABLE_AUTH and JWT_SECRET == "change-this-in-production":
+    logger.warning("JWT_SECRET is using the default insecure value. Set JWT_SECRET env var.")
 
 
 def validate_api_key(api_key: str = Header(None, alias="X-API-Key")) -> str:
-    """Validate API key from request header"""
     if DISABLE_AUTH:
         return "development"
-    
     if not api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing API key. Include X-API-Key header."
-        )
-    
+        raise HTTPException(status_code=401, detail="Missing API key. Include X-API-Key header.")
     valid_key = os.getenv("API_KEY")
     if not valid_key:
-        raise HTTPException(
-            status_code=500,
-            detail="API_KEY not configured on server"
-        )
-    
-    if api_key != valid_key:
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key"
-        )
-    
+        raise HTTPException(status_code=500, detail="API_KEY not configured on server")
+    if not hmac.compare_digest(api_key, valid_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
     return api_key
 
 
