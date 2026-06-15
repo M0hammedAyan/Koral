@@ -34,3 +34,4 @@ kubeconfig
 .vscode/
 .idea/
 *.swp
+.aider*
