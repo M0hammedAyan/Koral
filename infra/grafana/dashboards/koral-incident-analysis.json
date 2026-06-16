@@ -5,41 +5,47 @@
   "version": 1,
   "refresh": "5s",
   "time": { "from": "now-30m", "to": "now" },
+  "__inputs": [
+    { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus" }
+  ],
   "panels": [
     {
       "type": "timeseries",
       "title": "Correlation engine request rate",
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "rate(koral_correlation_requests_total[1m])", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(koral_correlation_requests_total[1m])", "refId": "A" }
       ]
     },
     {
       "type": "timeseries",
       "title": "AI engine request rate",
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "rate(koral_ai_requests_total[1m])", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(koral_ai_requests_total[1m])", "refId": "A" }
       ]
     },
     {
       "type": "timeseries",
       "title": "Anomaly scores (latest)",
       "gridPos": { "x": 0, "y": 5, "w": 24, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "cpu_anomaly_score", "refId": "A" },
-        { "expr": "memory_anomaly_score", "refId": "B" },
-        { "expr": "log_anomaly_count", "refId": "C" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "cpu_anomaly_score", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "memory_anomaly_score", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "log_anomaly_count", "refId": "C" }
       ]
     },
     {
       "type": "stat",
       "title": "Prometheus scrape health",
       "gridPos": { "x": 0, "y": 11, "w": 24, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "min(up)", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "min(up)", "refId": "A" }
       ]
     }
   ]
 }
-

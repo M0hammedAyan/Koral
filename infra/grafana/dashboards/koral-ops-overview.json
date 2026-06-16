@@ -5,42 +5,53 @@
   "version": 1,
   "refresh": "5s",
   "time": { "from": "now-30m", "to": "now" },
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
   "panels": [
     {
       "type": "stat",
       "title": "Service UP (KORAL core)",
       "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "sum(up{job=~\"koral-backend|koral-ai-engine|koral-correlation|cpu-agent|memory-agent|storage-agent|log-agent\"})", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(up{job=~\"koral-backend|koral-ai-engine|koral-correlation|cpu-agent|memory-agent|storage-agent|log-agent\"})", "refId": "A" }
       ]
     },
     {
       "type": "timeseries",
       "title": "Backend HTTP request rate",
       "gridPos": { "x": 8, "y": 0, "w": 16, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "rate(koral_backend_requests_total[1m])", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(koral_backend_requests_total[1m])", "refId": "A" }
       ]
     },
     {
       "type": "timeseries",
       "title": "Agent synthetic fallback (1 = synthetic)",
       "gridPos": { "x": 0, "y": 4, "w": 24, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "koral_agent_synthetic_mode", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "koral_agent_synthetic_mode", "refId": "A" }
       ]
     },
     {
       "type": "timeseries",
       "title": "Agent signals (CPU / Memory / Storage / Log errors)",
       "gridPos": { "x": 0, "y": 9, "w": 24, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "cpu_usage_percent", "refId": "A" },
-        { "expr": "memory_usage_percent", "refId": "B" },
-        { "expr": "disk_io_rate", "refId": "C" },
-        { "expr": "log_error_rate", "refId": "D" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "cpu_usage_percent", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "memory_usage_percent", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "disk_io_rate", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "log_error_rate", "refId": "D" }
       ]
     }
   ]
 }
-

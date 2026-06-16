@@ -313,6 +313,12 @@ services:
       SMTP_PORT:              ${SMTP_PORT:-1025}
       DISABLE_EMAIL:          ${DISABLE_EMAIL:-true}
       APPROVAL_DB_PATH:       /data/approvals.db
+      DB_TYPE:                ${DB_TYPE:-sqlite}
+      DB_HOST:                ${POSTGRES_HOST:-postgres}
+      DB_PORT:                ${POSTGRES_PORT:-5432}
+      DB_NAME:                ${POSTGRES_DB:-koral}
+      DB_USER:                ${POSTGRES_USER:-postgres}
+      DB_PASS:                ${POSTGRES_PASSWORD:-postgres}
     depends_on:
       backend:
         condition: service_started

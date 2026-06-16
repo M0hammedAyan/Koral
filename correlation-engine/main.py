@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from ai_core.rca import determine_root_cause, determine_severity, primary_metric
 from ai_core.anomaly import RollingZScoreDetector
 from ai_core.incident import build_incident
+from ai_core.correlation import correlate_batch
 from ai_core.validator import validate_event, ValidationError
 
 app = FastAPI(title="KORAL Correlation Engine", version="2.0.0")
@@ -154,3 +155,37 @@ def _fallback_incident(anomaly: AnomalyIn, metric: str, reason: str) -> dict:
         "created_at": anomaly.timestamp,
         "evidence_count": 1,
     }
+
+
+class BatchAnomalyIn(BaseModel):
+    events: list
+    window_seconds: int = 60
+
+
+@app.post("/correlate-batch")
+def correlate_batch_endpoint(body: BatchAnomalyIn):
+    """Correlate multiple events across pods, services, and namespaces."""
+    scored_events = []
+    for raw in body.events:
+        metric = _METRIC_MAP.get(raw.get("metric", ""), raw.get("metric", "cpu"))
+        unit = raw.get("unit") or _UNITS.get(metric, "value")
+        source = raw.get("source") or f"{metric}-agent"
+        event = {
+            "timestamp": raw.get("timestamp", 0),
+            "pod": raw.get("pod", "unknown"),
+            "namespace": raw.get("namespace", "koral-system"),
+            "metric": metric,
+            "value": raw.get("value", 0.0),
+            "unit": unit,
+            "window_size": raw.get("window_size", 300),
+            "source": source,
+            "z_score": raw.get("z_score", 0.0),
+            "is_anomaly": raw.get("is_anomaly", False),
+        }
+        try:
+            scored_events.append(validate_event(event, final=True))
+        except ValidationError:
+            pass
+
+    incidents = correlate_batch(scored_events, window_seconds=body.window_seconds)
+    return {"incidents": incidents, "count": len(incidents)}

@@ -5,33 +5,38 @@
   "version": 1,
   "refresh": "5s",
   "time": { "from": "now-1h", "to": "now" },
+  "__inputs": [
+    { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus" }
+  ],
   "panels": [
     {
       "type": "stat",
       "title": "Remediation services UP",
       "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "sum(up{job=~\"koral-remediation-planner|koral-approval-engine|koral-sandbox-executor|koral-verification-engine|koral-notifier\"})", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(up{job=~\"koral-remediation-planner|koral-approval-engine|koral-sandbox-executor|koral-verification-engine|koral-notifier\"})", "refId": "A" }
       ]
     },
     {
       "type": "timeseries",
       "title": "Planner request rate",
       "gridPos": { "x": 8, "y": 0, "w": 16, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "rate(http_requests_total{job=\"koral-remediation-planner\"}[1m])", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(http_requests_total{job=\"koral-remediation-planner\"}[1m])", "refId": "A" }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Executor / Verifier / Notifier request rate (fallback: UP only)",
+      "title": "Executor / Verifier / Notifier UP",
       "gridPos": { "x": 0, "y": 4, "w": 24, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "up{job=\"koral-sandbox-executor\"}", "refId": "A" },
-        { "expr": "up{job=\"koral-verification-engine\"}", "refId": "B" },
-        { "expr": "up{job=\"koral-notifier\"}", "refId": "C" }
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "up{job=\"koral-sandbox-executor\"}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "up{job=\"koral-verification-engine\"}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "up{job=\"koral-notifier\"}", "refId": "C" }
       ]
     }
   ]
 }
-

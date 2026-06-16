@@ -36,13 +36,24 @@ def validate_api_key(api_key: str = Header(None, alias="X-API-Key")) -> str:
     if DISABLE_AUTH:
         return "development"
     if not api_key:
+        _write_auth_audit("auth.login_failed", "anonymous", {"reason": "missing_api_key"})
         raise HTTPException(status_code=401, detail="Missing API key. Include X-API-Key header.")
     valid_key = os.getenv("API_KEY")
     if not valid_key:
         raise HTTPException(status_code=500, detail="API_KEY not configured on server")
     if not hmac.compare_digest(api_key, valid_key):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        _write_auth_audit("auth.login_failed", "api_key", {"reason": "invalid_key"})
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    _write_auth_audit("auth.login", "api_key", {"method": "api_key"})
     return api_key
+
+
+def _write_auth_audit(event_type: str, actor: str, payload: dict) -> None:
+    try:
+        from backend.audit import write_audit
+        write_audit(event_type, actor, "auth", payload)
+    except Exception:
+        pass
 
 
 def validate_jwt(authorization: str = Header(None, alias="Authorization")) -> dict:

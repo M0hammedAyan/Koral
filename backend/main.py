@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.responses import JSONResponse
 import os
+import hmac
 import signal
 import asyncio
 
@@ -41,8 +42,9 @@ from backend.routes.ai import router as ai_router
 from backend.routes.fixes import router as fixes_router
 from backend.routes.remediation import router as remediation_router
 from backend.routes.audit import router as audit_router
+from backend.routes.slo import router as slo_router
 from backend.websocket.manager import manager
-from backend.auth import get_allowed_origins, validate_api_key
+from backend.auth import get_allowed_origins, validate_api_key, DISABLE_AUTH
 from backend.database import init_db, close_db_pool, query_one
 import logging
 import sys
@@ -50,7 +52,7 @@ import time
 from collections import defaultdict
 from typing import Dict, Tuple
 import httpx
-from backend.middleware import RequestIDMiddleware, ErrorResponseMiddleware
+from backend.middleware import RequestIDMiddleware, ErrorResponseMiddleware, AuditAccessMiddleware
 from backend.errors import standard_response
 from backend.resilience import CircuitBreaker, call_with_circuit
 
@@ -181,6 +183,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(AuditAccessMiddleware)
 app.add_middleware(ErrorResponseMiddleware)
 
 
@@ -233,6 +236,7 @@ app.include_router(ai_router)
 app.include_router(fixes_router)
 app.include_router(remediation_router)
 app.include_router(audit_router)
+app.include_router(slo_router)
 
 
 async def _dependency_health(url: str) -> bool:
@@ -313,6 +317,12 @@ def root():
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates"""
+    if not DISABLE_AUTH:
+        api_key = websocket.query_params.get("api_key") or websocket.headers.get("X-API-Key")
+        valid_key = os.getenv("API_KEY")
+        if not api_key or not valid_key or not hmac.compare_digest(api_key, valid_key):
+            await websocket.close(code=4401)
+            return
     await manager.connect(websocket)
     WEBSOCKET_CLIENTS.set(len(manager.active))
     try:

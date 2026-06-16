@@ -3,21 +3,42 @@ from starlette.responses import Response
 from typing import Callable
 import uuid
 
+_SKIP_AUDIT_PATHS = {"/health", "/health/live", "/health/ready", "/metrics", "/docs", "/openapi.json", "/redoc"}
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next: Callable):
-        # Extract or generate request id
         req_id = request.headers.get("x-request-id") or request.headers.get("X-Request-ID")
         if req_id:
-            # Reject duplicate style values containing commas/space
             req_id = req_id.split(",")[0].strip()
         else:
             req_id = uuid.uuid4().hex
         request.state.request_id = req_id
 
         response: Response = await call_next(request)
-        # Attach header for clients and traces
         response.headers["X-Request-ID"] = req_id
+        return response
+
+
+class AuditAccessMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next: Callable):
+        response: Response = await call_next(request)
+        path = request.url.path
+        if path in _SKIP_AUDIT_PATHS or request.method == "OPTIONS":
+            return response
+        if response.status_code >= 400:
+            try:
+                from backend.audit import write_audit
+                actor = request.headers.get("X-API-Key", "anonymous")[:16]
+                write_audit(
+                    "api.access_denied" if response.status_code in (401, 403) else "api.error",
+                    actor,
+                    path,
+                    {"method": request.method, "status": response.status_code,
+                     "request_id": getattr(request.state, "request_id", "")},
+                )
+            except Exception:
+                pass
         return response
 
 
@@ -26,7 +47,6 @@ class ErrorResponseMiddleware(BaseHTTPMiddleware):
         try:
             return await call_next(request)
         except Exception as exc:
-            # Minimal safe fallback for uncaught exceptions
             req_id = getattr(request.state, "request_id", None) or ""
             body = {
                 "status": "error",
