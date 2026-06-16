@@ -43,6 +43,9 @@ COPY --from=builder /opt/venv /opt/venv
 COPY backend/ ./backend/
 COPY feedback/ ./feedback/
 COPY threshold/ ./threshold/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./alembic.ini
+COPY database/ ./database/
 
 # Create temporary directories with proper permissions
 RUN mkdir -p /tmp/app && chown -R koral:koral /tmp/app
