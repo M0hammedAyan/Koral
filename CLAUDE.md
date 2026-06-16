@@ -29,6 +29,19 @@ Never optimize for demos, hackathons, temporary workarounds, mock implementation
 | P9 | SLO platform — /slo/* endpoints (availability, MTTR, detection latency, remediation success, error budget) | DONE |
 | P10 | Integration tests — tests/test_backend_integration.py (auth, anomalies, incidents, fixes, SLO, remediation) | DONE |
 
+## Post-Priority Hardening (2026-06-16)
+
+| # | Task | Status |
+|---|---|---|
+| 1 | Commit all production hardening changes | DONE |
+| 2 | Alembic migrations — alembic==1.13.1 added, Dockerfile copies alembic/, 0002_add_audit_table migration | DONE |
+| 3 | CI/CD — ruff lint step + alembic upgrade head before pytest in ci.yml | DONE |
+| 4 | RBAC — backend/rbac.py with VIEWER/OPERATOR/ADMIN roles; all routes annotated | DONE |
+| 5 | Execution/verification DB persistence — removed in-memory dicts, all data in execution_log/verification_results | DONE |
+| 6 | Frontend wiring — SLO page, getSLO()/correlateBatch() in api.ts, sidebar nav item | DONE |
+| 7 | Redis rate limiter — backend/rate_limit_redis.py, graceful fallback, redis:7-alpine in docker-compose | DONE |
+| 8 | Secret management — .env.example updated, koral-secrets.yaml.template for K8s | DONE |
+
 ---
 
 # Architecture
