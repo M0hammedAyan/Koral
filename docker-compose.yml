@@ -72,6 +72,7 @@ services:
       DB_USER:                ${POSTGRES_USER:-postgres}
       DB_PASS:                ${POSTGRES_PASSWORD:-postgres}
       DB_NAME:                ${POSTGRES_DB:-koral}
+      REDIS_URL:              redis://redis:6379/0
       CORRELATION_ENGINE_URL: http://correlation-engine:8005
       AI_ENGINE_URL:          http://ai-engine:8006
       NAMESPACE:              ${KORAL_NAMESPACE:-koral-system}
@@ -134,6 +135,21 @@ services:
       PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
       FLUENTD_HOST:   ${FLUENTD_HOST:-fluentd}
       FLUENTD_PORT:   ${FLUENTD_PORT:-9880}
+
+  # ── Redis (Rate Limiter) ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: koral-redis
+    restart: unless-stopped
+    networks: [koral]
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # ── PostgreSQL ──────────────────────────────────────────────────────
   postgres:

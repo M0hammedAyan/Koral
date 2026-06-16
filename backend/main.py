@@ -55,6 +55,7 @@ import httpx
 from backend.middleware import RequestIDMiddleware, ErrorResponseMiddleware, AuditAccessMiddleware
 from backend.errors import standard_response
 from backend.resilience import CircuitBreaker, call_with_circuit
+from backend.rate_limit_redis import check_rate_limit, connect_redis
 
 try:
     from opentelemetry import trace
@@ -82,6 +83,7 @@ RATE_LIMIT_IP = 100
 RATE_LIMIT_API_KEY = 500
 AI_ENGINE_URL = os.getenv("AI_ENGINE_URL", "http://ai-engine:8006")
 CORRELATION_ENGINE_URL = os.getenv("CORRELATION_ENGINE_URL", "http://correlation-engine:8005")
+REDIS_URL = os.getenv("REDIS_URL", "")
 
 
 def _configure_tracing(app: FastAPI) -> None:
@@ -143,10 +145,16 @@ async def lifespan(app: FastAPI):
         logger.info("Database initialized and loaded")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}", exc_info=True)
+    app.state.redis = await connect_redis(REDIS_URL)
     logger.info("All routes registered")
     logger.info("Backend ready to accept connections")
     yield
     app.state.shutting_down = True
+    if getattr(app.state, "redis", None):
+        try:
+            await app.state.redis.aclose()
+        except Exception:
+            pass
     try:
         await asyncio.wait_for(manager.close_all(), timeout=30)
     except Exception as e:
@@ -200,19 +208,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         window = int(now // RATE_LIMIT_WINDOW)
         client_ip = request.client.host if request.client else "unknown"
         api_key = request.headers.get("X-API-Key", "")
+        redis = getattr(request.app.state, "redis", None)
 
-        def _allow(bucket: Dict[Tuple[str, int], list[float]], key: str, limit: int) -> bool:
-            entries = bucket[(key, window)]
-            entries[:] = [ts for ts in entries if now - ts < RATE_LIMIT_WINDOW]
-            if len(entries) >= limit:
-                return False
-            entries.append(now)
-            return True
+        if redis is not None:
+            if not await check_rate_limit(redis, f"ip:{client_ip}", RATE_LIMIT_IP, RATE_LIMIT_WINDOW):
+                return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+            if api_key and not await check_rate_limit(redis, f"key:{api_key[:32]}", RATE_LIMIT_API_KEY, RATE_LIMIT_WINDOW):
+                return JSONResponse({"detail": "API key rate limit exceeded"}, status_code=429)
+        else:
+            def _allow(bucket: Dict[Tuple[str, int], list[float]], key: str, limit: int) -> bool:
+                entries = bucket[(key, window)]
+                entries[:] = [ts for ts in entries if now - ts < RATE_LIMIT_WINDOW]
+                if len(entries) >= limit:
+                    return False
+                entries.append(now)
+                return True
 
-        if not _allow(_ip_requests, client_ip, RATE_LIMIT_IP):
-            return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
-        if api_key and not _allow(_key_requests, api_key, RATE_LIMIT_API_KEY):
-            return JSONResponse({"detail": "API key rate limit exceeded"}, status_code=429)
+            if not _allow(_ip_requests, client_ip, RATE_LIMIT_IP):
+                return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+            if api_key and not _allow(_key_requests, api_key, RATE_LIMIT_API_KEY):
+                return JSONResponse({"detail": "API key rate limit exceeded"}, status_code=429)
 
         return await call_next(request)
 
