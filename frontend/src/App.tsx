@@ -10,6 +10,7 @@ import { DependencyGraph } from './pages/DependencyGraph';
 import { FixHistory } from './pages/FixHistory';
 import { Settings } from './pages/Settings';
 import { RemediationDashboard } from './pages/RemediationDashboard';
+import { SLOPage } from './pages/SLO';
 import { api } from './services/api';
 import axios from 'axios';
 import './App.css';
@@ -63,6 +64,7 @@ function App() {
                 </ErrorBoundary>
               } />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/slo" element={<SLOPage />} />
             </Routes>
           </main>
         </div>

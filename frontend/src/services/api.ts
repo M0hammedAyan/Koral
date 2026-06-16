@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Incident, Graph, Anomaly } from '../types';
+import { Incident, Graph, Anomaly, SLOData } from '../types';
 
 const API_KEY = process.env.REACT_APP_API_KEY || '';
 
@@ -86,6 +86,26 @@ export const api = {
     } catch (e) {
       console.error('[KORAL] /fixes/record failed:', e);
       throw e;
+    }
+  },
+
+  getSLO: async (): Promise<SLOData | null> => {
+    try {
+      const { data } = await client.get('/slo/');
+      return data;
+    } catch (e) {
+      console.error('[KORAL] /slo/ failed:', e);
+      return null;
+    }
+  },
+
+  correlateBatch: async (events: any[], windowSeconds: number = 60): Promise<any> => {
+    try {
+      const { data } = await client.post('/correlate-batch', { events, window_seconds: windowSeconds });
+      return data;
+    } catch (e) {
+      console.error('[KORAL] /correlate-batch failed:', e);
+      return { incidents: [], count: 0 };
     }
   },
 };

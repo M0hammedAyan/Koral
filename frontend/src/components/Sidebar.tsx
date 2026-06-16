@@ -12,6 +12,7 @@ export const Sidebar: React.FC<{ collapsed: boolean }> = ({ collapsed }) => {
     { path: '/graph', label: 'Dependency Graph', icon: 'network' },
     { path: '/fixes', label: 'Fix History', icon: 'tools' },
     { path: '/remediation', label: 'Remediation', icon: 'remediation' },
+    { path: '/slo', label: 'SLO', icon: 'slo' },
     { path: '/settings', label: 'Settings', icon: 'settings' }
   ];
 
@@ -54,6 +55,11 @@ export const Sidebar: React.FC<{ collapsed: boolean }> = ({ collapsed }) => {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="9"/>
           <path d="M12 7v5l3 2"/>
+        </svg>
+      ),
+      slo: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
         </svg>
       ),
       settings: (

@@ -60,7 +60,21 @@ export interface KPIData {
   alerts: number;
 }
 
-export interface MetricPoint {
-  timestamp: number;
-  value: number;
+export interface SLOData {
+  availability_percent: number;
+  total_incidents: number;
+  resolved: number;
+  mttr_seconds: number;
+  mttr_min_seconds: number;
+  mttr_max_seconds: number;
+  avg_detection_latency_seconds: number;
+  remediation_success_rate: number;
+  total_verifications: number;
+  successful: number;
+  error_budget: {
+    slo_target_percent: number;
+    availability_percent: number;
+    error_budget_used_percent: number;
+    error_budget_remaining_percent: number;
+  };
 }
