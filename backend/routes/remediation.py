@@ -18,6 +18,11 @@ from backend.database_remediation import (
     get_remediation_plan as db_get_remediation_plan,
     list_remediation_plans as db_list_remediation_plans,
     count_remediation_plans as db_count_remediation_plans,
+    add_execution,
+    get_execution as db_get_execution,
+    list_executions as db_list_executions,
+    add_verification,
+    get_verification as db_get_verification,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,11 +73,7 @@ class ApprovalActionRequest(BaseModel):
     approver_email: Optional[str] = None
     reason: Optional[str] = None
 
-# NOTE: workflow durability
-# Plans are persisted in DB via backend.database_remediation.
-# Executions/verifications are still in-memory (Phase 3/4 will persist these too).
-remediation_executions = {}
-remediation_verifications = {}
+# NOTE: workflow durability — executions and verifications now persisted in DB
 
 # ── Health Check ──────────────────────────────────────────────────
 @router.get("/status", dependencies=[Depends(require_viewer)])
@@ -88,7 +89,7 @@ async def remediation_status() -> RemediationStatus:
         status="operational" if REMEDIATION_ENABLED else "disabled",
         enabled=REMEDIATION_ENABLED,
         plan_count=plan_count,
-        execution_count=len(remediation_executions)
+        execution_count=len(db_list_executions(limit=1000))
     )
 
 # ── Create Remediation Plan ──────────────────────────────────────
@@ -219,7 +220,26 @@ async def execute_remediation(plan_id: str, approval_id: str):
             if response.status_code == 200:
                 execution = response.json()
                 execution["pre_metrics"] = pre_metrics
-                remediation_executions[execution["execution_id"]] = execution
+                try:
+                    add_execution(
+                        execution_id=execution["execution_id"],
+                        plan_id=plan["plan_id"],
+                        incident_id=plan["incident_id"],
+                        command=plan.get("recommended_action", ""),
+                        parameters=plan.get("parameters", {}),
+                        execution_status=execution.get("status", "success"),
+                        start_time=execution.get("start_time", ""),
+                        end_time=execution.get("end_time", ""),
+                        duration_ms=execution.get("duration_ms", 0),
+                        stdout=execution.get("stdout", ""),
+                        stderr=execution.get("stderr", ""),
+                        exit_code=execution.get("exit_code", 0),
+                        blast_radius=execution.get("blast_radius", 0),
+                        pod_failures=execution.get("pod_failures", []),
+                        pre_metrics=pre_metrics,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to persist execution {execution.get('execution_id')}: {e}")
                 write_audit("remediation.executed", "system", plan_id,
                             {"execution_id": execution["execution_id"],
                              "command": plan.get("recommended_action"),
@@ -238,10 +258,9 @@ async def execute_remediation(plan_id: str, approval_id: str):
 async def verify_remediation(execution_id: str, plan_id: str, primary_metric: str):
     """Verify remediation effectiveness"""
     
-    if execution_id not in remediation_executions:
+    execution = db_get_execution(execution_id)
+    if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    
-    execution = remediation_executions[execution_id]
     plan = db_get_remediation_plan(plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -262,7 +281,23 @@ async def verify_remediation(execution_id: str, plan_id: str, primary_metric: st
             
             if response.status_code == 200:
                 verification = response.json()
-                remediation_verifications[verification["verification_id"]] = verification
+                try:
+                    add_verification(
+                        verification_id=verification["verification_id"],
+                        execution_id=execution_id,
+                        plan_id=plan_id,
+                        incident_id=plan["incident_id"],
+                        verification_status=verification.get("verification_status", ""),
+                        pre_metrics=verification.get("pre_metrics", {}),
+                        post_metrics=verification.get("post_metrics", {}),
+                        improvement_percent=verification.get("improvement_percent", 0.0),
+                        anomaly_resolved=verification.get("anomaly_resolved", False),
+                        z_score_delta=verification.get("z_score_delta", 0.0),
+                        verification_details=verification.get("verification_details", ""),
+                        duration_ms=verification.get("duration_ms", 0),
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to persist verification {verification.get('verification_id')}: {e}")
                 write_audit("remediation.verified", "system", plan_id,
                             {"verification_id": verification["verification_id"],
                              "status": verification.get("verification_status"),
@@ -328,9 +363,9 @@ async def list_remediation_plans(limit: int = 100):
 
 # ── List Executions ────────────────────────────────────────────
 @router.get("/executions", dependencies=[Depends(require_viewer)])
-async def list_executions(limit: int = 100):
+async def list_executions_route(limit: int = 100):
     """List all execution records"""
-    executions_list = list(remediation_executions.values())[:limit]
+    executions_list = db_list_executions(limit=limit)
     return {
         "count": len(executions_list),
         "executions": executions_list
@@ -348,14 +383,11 @@ async def list_operations(limit: int = 100):
         plans_list = []
 
     operations = []
+    all_executions = db_list_executions(limit=1000)
+    exec_by_plan = {e.get("plan_id"): e for e in all_executions}
 
     for plan in plans_list:
-        execution_status = None
-        for execution in remediation_executions.values():
-            if execution.get("plan_id") == plan.get("plan_id"):
-                execution_status = execution.get("status")
-                break
-
+        execution = exec_by_plan.get(plan.get("plan_id"))
         operations.append(
             {
                 "plan_id": plan.get("plan_id"),
@@ -365,7 +397,7 @@ async def list_operations(limit: int = 100):
                 "severity": plan.get("severity", "medium"),
                 "created_at": plan.get("created_at", datetime.now(timezone.utc).isoformat()),
                 "updated_at": plan.get("updated_at", datetime.now(timezone.utc).isoformat()),
-                "execution_status": execution_status,
+                "execution_status": execution.get("execution_status") if execution else None,
                 "verification_status": None,
                 "improvement_percent": None,
             }

@@ -325,3 +325,139 @@ def count_remediation_plans() -> int:
         (n,) = cursor.fetchone()
         conn.close()
         return int(n or 0)
+
+
+def _ph():
+    return "%s" if DB_TYPE == "postgres" else "?"
+
+
+def add_execution(execution_id: str, plan_id: str, incident_id: str,
+                  command: str, parameters: Any, execution_status: str,
+                  start_time: str, end_time: str, duration_ms: int,
+                  stdout: str, stderr: str, exit_code: int,
+                  blast_radius: int, pod_failures: Any,
+                  pre_metrics: Any = None) -> None:
+    ph = _ph()
+    now = datetime.now(timezone.utc).isoformat()
+    sql = f"""
+        INSERT INTO execution_log
+        (execution_id, plan_id, incident_id, command, parameters,
+         execution_status, start_time, end_time, duration_ms,
+         stdout, stderr, exit_code, blast_radius, pod_failures, created_at)
+        VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})
+    """
+    conn = _database._get_db()
+    try:
+        conn.cursor().execute(sql, (
+            execution_id, plan_id, incident_id, command, _json_dumps_safe(parameters),
+            execution_status, start_time, end_time, duration_ms,
+            stdout, stderr, exit_code, blast_radius, _json_dumps_safe(pod_failures), now
+        ))
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
+def get_execution(execution_id: str) -> Optional[Dict[str, Any]]:
+    ph = _ph()
+    conn = _database._get_db()
+    try:
+        if DB_TYPE == "postgres":
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            import sqlite3
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+        cur.execute(f"SELECT * FROM execution_log WHERE execution_id={ph}", (execution_id,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["parameters"] = _json_loads_safe(d.get("parameters"), {})
+    d["pod_failures"] = _json_loads_safe(d.get("pod_failures"), [])
+    return d
+
+
+def list_executions(limit: int = 100) -> List[Dict[str, Any]]:
+    limit = max(1, min(int(limit), 500))
+    conn = _database._get_db()
+    try:
+        if DB_TYPE == "postgres":
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM execution_log ORDER BY id DESC LIMIT %s", (limit,))
+        else:
+            import sqlite3
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM execution_log ORDER BY id DESC LIMIT ?", (limit,))
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["parameters"] = _json_loads_safe(d.get("parameters"), {})
+        d["pod_failures"] = _json_loads_safe(d.get("pod_failures"), [])
+        result.append(d)
+    return result
+
+
+def add_verification(verification_id: str, execution_id: str, plan_id: str,
+                     incident_id: str, verification_status: str,
+                     pre_metrics: Any, post_metrics: Any,
+                     improvement_percent: float, anomaly_resolved: bool,
+                     z_score_delta: float, verification_details: str,
+                     duration_ms: int) -> None:
+    ph = _ph()
+    now = datetime.now(timezone.utc).isoformat()
+    sql = f"""
+        INSERT INTO verification_results
+        (verification_id, execution_id, plan_id, incident_id,
+         verification_status, pre_metrics, post_metrics,
+         improvement_percent, anomaly_resolved, z_score_delta,
+         verification_details, duration_ms, created_at)
+        VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})
+    """
+    conn = _database._get_db()
+    try:
+        conn.cursor().execute(sql, (
+            verification_id, execution_id, plan_id, incident_id,
+            verification_status,
+            _json_dumps_safe(pre_metrics), _json_dumps_safe(post_metrics),
+            improvement_percent, int(anomaly_resolved), z_score_delta,
+            verification_details, duration_ms, now
+        ))
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
+def get_verification(verification_id: str) -> Optional[Dict[str, Any]]:
+    ph = _ph()
+    conn = _database._get_db()
+    try:
+        if DB_TYPE == "postgres":
+            from psycopg2.extras import RealDictCursor
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            import sqlite3
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+        cur.execute(f"SELECT * FROM verification_results WHERE verification_id={ph}", (verification_id,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["pre_metrics"] = _json_loads_safe(d.get("pre_metrics"), {})
+    d["post_metrics"] = _json_loads_safe(d.get("post_metrics"), {})
+    return d
