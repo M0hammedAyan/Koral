@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
-from backend.auth import validate_api_key
+from backend.rbac import require_viewer
 from backend.database import query_all, query_one, DB_TYPE
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/slo", tags=["slo"], dependencies=[Depends(validate_api_key)])
+router = APIRouter(prefix="/slo", tags=["slo"])
 
 _PH = "%s" if DB_TYPE == "postgres" else "?"
 
@@ -77,7 +77,7 @@ def _error_budget() -> dict:
     }
 
 
-@router.get("/")
+@router.get("/", dependencies=[Depends(require_viewer)])
 def slo_summary():
     return {
         **_availability(),
@@ -88,26 +88,26 @@ def slo_summary():
     }
 
 
-@router.get("/availability")
+@router.get("/availability", dependencies=[Depends(require_viewer)])
 def slo_availability():
     return _availability()
 
 
-@router.get("/mttr")
+@router.get("/mttr", dependencies=[Depends(require_viewer)])
 def slo_mttr():
     return _mttr()
 
 
-@router.get("/detection-latency")
+@router.get("/detection-latency", dependencies=[Depends(require_viewer)])
 def slo_detection_latency():
     return _detection_latency()
 
 
-@router.get("/remediation-success")
+@router.get("/remediation-success", dependencies=[Depends(require_viewer)])
 def slo_remediation_success():
     return _remediation_success()
 
 
-@router.get("/error-budget")
+@router.get("/error-budget", dependencies=[Depends(require_viewer)])
 def slo_error_budget():
     return _error_budget()

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from backend.services.processor import graph_data
-from backend.auth import validate_api_key
+from backend.rbac import require_viewer
 
-router = APIRouter(dependencies=[Depends(validate_api_key)])
+router = APIRouter()
 
 
-@router.get("/graph")
+@router.get("/graph", dependencies=[Depends(require_viewer)])
 def get_graph():
     return graph_data

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from backend.auth import validate_api_key
+from backend.rbac import require_viewer, require_operator, require_admin
 from backend.audit import write_audit
 import logging
 
@@ -22,7 +22,7 @@ from backend.database_remediation import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/remediation", tags=["remediation"], dependencies=[Depends(validate_api_key)])
+router = APIRouter(prefix="/remediation", tags=["remediation"])
 
 # ── Configuration ──────────────────────────────────────────────────
 REMEDIATION_PLANNER_URL  = os.getenv("REMEDIATION_PLANNER_URL", "http://remediation-planner:8007")
@@ -75,7 +75,7 @@ remediation_executions = {}
 remediation_verifications = {}
 
 # ── Health Check ──────────────────────────────────────────────────
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_viewer)])
 async def remediation_status() -> RemediationStatus:
     """Get remediation system status"""
     try:
@@ -92,7 +92,7 @@ async def remediation_status() -> RemediationStatus:
     )
 
 # ── Create Remediation Plan ──────────────────────────────────────
-@router.post("/plans")
+@router.post("/plans", dependencies=[Depends(require_operator)])
 async def create_remediation_plan(incident: RemediationPlanCreate):
     """Create remediation plan via AI analysis"""
     
@@ -132,7 +132,7 @@ async def create_remediation_plan(incident: RemediationPlanCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ── Get Remediation Plan ──────────────────────────────────────────
-@router.get("/plans/{plan_id}")
+@router.get("/plans/{plan_id}", dependencies=[Depends(require_viewer)])
 async def get_remediation_plan(plan_id: str):
     """Get remediation plan details"""
     plan = db_get_remediation_plan(plan_id)
@@ -141,7 +141,7 @@ async def get_remediation_plan(plan_id: str):
     raise HTTPException(status_code=404, detail="Plan not found")
 
 # ── Request Approval ──────────────────────────────────────────────
-@router.post("/approve/{plan_id}")
+@router.post("/approve/{plan_id}", dependencies=[Depends(require_operator)])
 async def request_approval(plan_id: str):
     """Request approval for remediation plan"""
     
@@ -180,7 +180,7 @@ async def request_approval(plan_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ── Execute Remediation ──────────────────────────────────────────
-@router.post("/execute/{plan_id}")
+@router.post("/execute/{plan_id}", dependencies=[Depends(require_admin)])
 async def execute_remediation(plan_id: str, approval_id: str):
     """Execute approved remediation plan"""
     
@@ -234,7 +234,7 @@ async def execute_remediation(plan_id: str, approval_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ── Verify Remediation ──────────────────────────────────────────
-@router.post("/verify/{execution_id}")
+@router.post("/verify/{execution_id}", dependencies=[Depends(require_operator)])
 async def verify_remediation(execution_id: str, plan_id: str, primary_metric: str):
     """Verify remediation effectiveness"""
     
@@ -277,7 +277,7 @@ async def verify_remediation(execution_id: str, plan_id: str, primary_metric: st
         raise HTTPException(status_code=500, detail=str(e))
 
 # ── Send Notification ──────────────────────────────────────────
-@router.post("/notify/{incident_id}")
+@router.post("/notify/{incident_id}", dependencies=[Depends(require_operator)])
 async def send_remediation_notification(incident_id: str, severity: str, root_cause: str, 
                                        status: str, message: str, affected_pods: list,
                                        plan_id: Optional[str] = None,
@@ -312,7 +312,7 @@ async def send_remediation_notification(incident_id: str, severity: str, root_ca
         return {}
 
 # ── List Plans ──────────────────────────────────────────────────
-@router.get("/plans")
+@router.get("/plans", dependencies=[Depends(require_viewer)])
 async def list_remediation_plans(limit: int = 100):
     """List all remediation plans"""
     try:
@@ -327,7 +327,7 @@ async def list_remediation_plans(limit: int = 100):
     }
 
 # ── List Executions ────────────────────────────────────────────
-@router.get("/executions")
+@router.get("/executions", dependencies=[Depends(require_viewer)])
 async def list_executions(limit: int = 100):
     """List all execution records"""
     executions_list = list(remediation_executions.values())[:limit]
@@ -338,7 +338,7 @@ async def list_executions(limit: int = 100):
 
 
 # ── Compatibility Endpoints For Legacy Frontend ──────────────────
-@router.get("/operations")
+@router.get("/operations", dependencies=[Depends(require_viewer)])
 async def list_operations(limit: int = 100):
     """Legacy endpoint: returns operations as a flat array."""
     try:
@@ -374,7 +374,7 @@ async def list_operations(limit: int = 100):
     return operations
 
 
-@router.get("/approvals")
+@router.get("/approvals", dependencies=[Depends(require_viewer)])
 async def list_pending_approvals():
     """Legacy endpoint: returns pending approvals as an array."""
     try:
@@ -388,7 +388,7 @@ async def list_pending_approvals():
     return []
 
 
-@router.patch("/approvals/{approval_id}/approve")
+@router.patch("/approvals/{approval_id}/approve", dependencies=[Depends(require_operator)])
 async def approve_approval(approval_id: str, payload: ApprovalActionRequest):
     """Legacy endpoint: approve an approval request."""
     try:
@@ -413,7 +413,7 @@ async def approve_approval(approval_id: str, payload: ApprovalActionRequest):
     return {"status": "approved", "approval_id": approval_id, "source": "backend-fallback"}
 
 
-@router.patch("/approvals/{approval_id}/reject")
+@router.patch("/approvals/{approval_id}/reject", dependencies=[Depends(require_operator)])
 async def reject_approval(approval_id: str, payload: ApprovalActionRequest):
     """Legacy endpoint: reject an approval request."""
     try:

@@ -1,13 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from backend.services.processor import fix_history, store_fix_history
-from backend.auth import validate_api_key
+from backend.rbac import require_viewer, require_operator
 from backend.audit import write_audit
 from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(validate_api_key)])
+router = APIRouter()
 
 
 class FixHistoryEntry(BaseModel):
@@ -20,7 +20,7 @@ class FixHistoryEntry(BaseModel):
     error_message: Optional[str] = Field(default="", description="Error message if failed")
 
 
-@router.get("/fixes/history")
+@router.get("/fixes/history", dependencies=[Depends(require_viewer)])
 def get_fix_history(limit: int = 100, applied_by: Optional[str] = None):
     """Get fix history with optional filtering"""
     if limit <= 0:
@@ -38,7 +38,7 @@ def get_fix_history(limit: int = 100, applied_by: Optional[str] = None):
     return result
 
 
-@router.get("/fixes/stats")
+@router.get("/fixes/stats", dependencies=[Depends(require_viewer)])
 def get_fix_stats():
     """Get statistics about fixes"""
     total = len(fix_history)
@@ -59,7 +59,7 @@ def get_fix_stats():
     }
 
 
-@router.get("/fixes/by-incident/{incident_id}")
+@router.get("/fixes/by-incident/{incident_id}", dependencies=[Depends(require_viewer)])
 def get_fixes_by_incident(incident_id: str):
     """Get all fixes for a specific incident"""
     result = [f for f in fix_history if f.get("incident_id") == incident_id]
@@ -67,7 +67,7 @@ def get_fixes_by_incident(incident_id: str):
     return result
 
 
-@router.post("/fixes/record")
+@router.post("/fixes/record", dependencies=[Depends(require_operator)])
 def record_fix(entry: FixHistoryEntry):
     """Record a new fix (typically called by developers via UI)"""
     try:

@@ -6,11 +6,11 @@ except ImportError:
     from pydantic import validator as field_validator
 from backend.websocket.manager import manager
 from backend.services.processor import process_anomaly, anomalies
-from backend.auth import validate_api_key
+from backend.rbac import require_viewer, require_operator
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(validate_api_key)])
+router = APIRouter()
 
 
 class AnomalyPayload(BaseModel):
@@ -41,7 +41,7 @@ class AnomalyPayload(BaseModel):
         return v
 
 
-@router.post("/anomalies", status_code=202)
+@router.post("/anomalies", status_code=202, dependencies=[Depends(require_operator)])
 async def receive_anomaly(payload: AnomalyPayload):
     """Receive anomaly data from agents and process it"""
     try:
@@ -54,7 +54,7 @@ async def receive_anomaly(payload: AnomalyPayload):
         raise HTTPException(status_code=500, detail=f"Failed to process anomaly: {str(e)}")
 
 
-@router.get("/anomalies")
+@router.get("/anomalies", dependencies=[Depends(require_viewer)])
 def list_anomalies(limit: int = 100):
     """Get recent anomalies"""
     if limit <= 0:

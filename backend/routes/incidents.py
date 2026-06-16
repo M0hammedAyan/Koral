@@ -1,14 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from backend.services.processor import incidents
-from backend.auth import validate_api_key
+from backend.rbac import require_viewer
 from backend.audit import write_audit
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(validate_api_key)])
+router = APIRouter()
 
 
-@router.get("/incidents")
+@router.get("/incidents", dependencies=[Depends(require_viewer)])
 def list_incidents(limit: int = 50):
     """Get recent incidents"""
     if limit <= 0:

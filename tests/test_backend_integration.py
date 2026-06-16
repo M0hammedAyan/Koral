@@ -4,6 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("API_KEY", "test-api-key")
+os.environ.setdefault("API_KEY_ADMIN", "test-admin-key")
+os.environ.setdefault("API_KEY_OPERATOR", "test-operator-key")
+os.environ.setdefault("API_KEY_VIEWER", "test-viewer-key")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 os.environ.setdefault("DB_TYPE", "sqlite")
 os.environ.setdefault("DB_PATH", ":memory:")
@@ -13,8 +16,12 @@ os.environ.setdefault("REMEDIATION_ENABLED", "true")
 from backend.main import app
 
 client = TestClient(app, raise_server_exceptions=False)
-AUTH = {"X-API-Key": "test-api-key"}
+ADMIN    = {"X-API-Key": "test-admin-key"}
+OPERATOR = {"X-API-Key": "test-operator-key"}
+VIEWER   = {"X-API-Key": "test-viewer-key"}
 BAD_AUTH = {"X-API-Key": "wrong-key"}
+# Legacy key gets operator-level access
+AUTH     = {"X-API-Key": "test-api-key"}
 
 
 # ── Auth ──────────────────────────────────────────────────────────
@@ -30,7 +37,7 @@ def test_invalid_api_key_returns_401():
 
 
 def test_valid_api_key_returns_200():
-    r = client.get("/anomalies", headers=AUTH)
+    r = client.get("/anomalies", headers=VIEWER)
     assert r.status_code == 200
 
 
@@ -41,6 +48,60 @@ def test_health_requires_no_auth():
 
 def test_metrics_requires_no_auth():
     r = client.get("/metrics")
+    assert r.status_code == 200
+
+
+# ── RBAC ──────────────────────────────────────────────────────────
+
+def test_viewer_cannot_post_anomaly():
+    payload = {
+        "timestamp": 1700000001, "pod": "x", "metric": "cpu",
+        "value": 1.0, "z_score": 1.0, "is_anomaly": False,
+        "namespace": "koral-system", "unit": "percent",
+        "source": "test", "window_size": 300,
+    }
+    r = client.post("/anomalies", json=payload, headers=VIEWER)
+    assert r.status_code == 403
+
+
+def test_operator_can_post_anomaly():
+    payload = {
+        "timestamp": 1700000002, "pod": "op-pod", "metric": "cpu",
+        "value": 50.0, "z_score": 2.0, "is_anomaly": True,
+        "namespace": "koral-system", "unit": "percent",
+        "source": "test", "window_size": 300,
+    }
+    r = client.post("/anomalies", json=payload, headers=OPERATOR)
+    assert r.status_code == 202
+
+
+def test_viewer_cannot_access_audit():
+    r = client.get("/audit", headers=VIEWER)
+    assert r.status_code == 403
+
+
+def test_operator_cannot_access_audit():
+    r = client.get("/audit", headers=OPERATOR)
+    assert r.status_code == 403
+
+
+def test_admin_can_access_audit():
+    r = client.get("/audit", headers=ADMIN)
+    assert r.status_code == 200
+
+
+def test_viewer_cannot_execute_remediation():
+    r = client.post("/remediation/execute/some-plan", headers=VIEWER, params={"approval_id": "x"})
+    assert r.status_code == 403
+
+
+def test_operator_cannot_execute_remediation():
+    r = client.post("/remediation/execute/some-plan", headers=OPERATOR, params={"approval_id": "x"})
+    assert r.status_code == 403
+
+
+def test_viewer_can_read_remediation_status():
+    r = client.get("/remediation/status", headers=VIEWER)
     assert r.status_code == 200
 
 

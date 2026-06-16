@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from backend.auth import validate_api_key
+from backend.rbac import require_viewer, require_admin
 from backend.database import query_all, DB_TYPE
 
-router = APIRouter(dependencies=[Depends(validate_api_key)])
+router = APIRouter()
 
 
-@router.get("/audit")
+@router.get("/audit", dependencies=[Depends(require_admin)])
 def get_audit_log(
     limit: int = Query(100, ge=1, le=1000),
     event_type: Optional[str] = None,

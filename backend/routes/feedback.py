@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from backend.auth import validate_api_key
+from backend.rbac import require_operator
 
-router = APIRouter(dependencies=[Depends(validate_api_key)])
+router = APIRouter()
 
 
 class FeedbackPayload(BaseModel):
@@ -11,7 +11,7 @@ class FeedbackPayload(BaseModel):
     is_correct: bool
 
 
-@router.post("/feedback", status_code=200)
+@router.post("/feedback", status_code=200, dependencies=[Depends(require_operator)])
 def receive_feedback(payload: FeedbackPayload):
     try:
         from feedback.feedback_loop import process_feedback
