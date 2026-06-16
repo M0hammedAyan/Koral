@@ -69,6 +69,14 @@ jobs:
           pip install -r correlation-engine/requirements.txt
           pip install -r ai_engine/requirements.txt
           pip install -r tests/requirements.txt
+      - name: Lint (ruff)
+        run: |
+          ruff check backend/ correlation-engine/ai_core/ --select E,F,W --ignore E501
+      - name: Run Alembic migrations
+        run: |
+          alembic upgrade head
+        env:
+          DATABASE_URL: postgresql://koral:koralpass@localhost:5432/koral
       - name: Run tests
         run: |
           PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/agents"
