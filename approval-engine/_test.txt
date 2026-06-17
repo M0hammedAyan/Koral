@@ -1,9 +1,0 @@
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-  File "D:\MY_Projects\KORAL\approval-engine\db.py", line 18, in init_db
-    with _conn() as c:
-         ^^^^^^^
-  File "D:\MY_Projects\KORAL\approval-engine\db.py", line 11, in _conn
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-  File "<frozen os>", line 225, in makedirs
-FileNotFoundError: [WinError 3] The system cannot find the path specified: ''

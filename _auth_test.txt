@@ -1,3 +1,0 @@
-JWT_SECRET is using the default insecure value. Set JWT_SECRET env var.
-[db] Loaded 0 incidents from database
-ALL OK
