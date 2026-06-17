@@ -85,11 +85,17 @@ async def remediation_status() -> RemediationStatus:
         logger.warning(f"Failed to count remediation plans: {e}")
         plan_count = 0
 
+    try:
+        execution_count = len(db_list_executions(limit=1000))
+    except Exception as e:
+        logger.warning(f"Failed to count executions: {e}")
+        execution_count = 0
+
     return RemediationStatus(
         status="operational" if REMEDIATION_ENABLED else "disabled",
         enabled=REMEDIATION_ENABLED,
         plan_count=plan_count,
-        execution_count=len(db_list_executions(limit=1000))
+        execution_count=execution_count,
     )
 
 # ── Create Remediation Plan ──────────────────────────────────────

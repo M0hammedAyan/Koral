@@ -1,17 +1,27 @@
 """Integration tests for KORAL backend routes."""
 import os
+import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("API_KEY", "test-api-key")
-os.environ.setdefault("API_KEY_ADMIN", "test-admin-key")
-os.environ.setdefault("API_KEY_OPERATOR", "test-operator-key")
-os.environ.setdefault("API_KEY_VIEWER", "test-viewer-key")
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
-os.environ.setdefault("DB_TYPE", "sqlite")
-os.environ.setdefault("DB_PATH", ":memory:")
-os.environ.setdefault("DISABLE_AUTH", "false")
-os.environ.setdefault("REMEDIATION_ENABLED", "true")
+# Use a real temp file so all sqlite3.connect() calls share one DB.
+# :memory: opens a fresh empty database per connection, breaking init_db().
+_db_fd, _db_path = tempfile.mkstemp(suffix=".db", prefix="koral_test_")
+os.close(_db_fd)
+
+os.environ["API_KEY"]          = "test-api-key"
+os.environ["API_KEY_ADMIN"]    = "test-admin-key"
+os.environ["API_KEY_OPERATOR"] = "test-operator-key"
+os.environ["API_KEY_VIEWER"]   = "test-viewer-key"
+os.environ["JWT_SECRET"]       = "test-jwt-secret"
+os.environ["DB_TYPE"]          = "sqlite"
+os.environ["DB_PATH"]          = _db_path
+os.environ["DISABLE_AUTH"]     = "false"
+os.environ["REMEDIATION_ENABLED"] = "true"
+
+# Explicitly init schema — TestClient doesn't guarantee lifespan fires before first test
+from backend.database import init_db as _init_db
+_init_db()
 
 from backend.main import app
 
@@ -156,13 +166,13 @@ def test_list_incidents_invalid_limit():
 # ── Audit ─────────────────────────────────────────────────────────
 
 def test_audit_log_accessible():
-    r = client.get("/audit", headers=AUTH)
+    r = client.get("/audit", headers=ADMIN)
     assert r.status_code == 200
     assert isinstance(r.json(), list)
 
 
 def test_audit_filter_by_event_type():
-    r = client.get("/audit?event_type=auth.login", headers=AUTH)
+    r = client.get("/audit?event_type=auth.login", headers=ADMIN)
     assert r.status_code == 200
 
 
