@@ -1,0 +1,102 @@
+{{- if and .Values.postgresql.enabled .Values.postgresql.readReplica.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-read
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    app: postgres-read
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  serviceName: postgres-read
+  replicas: {{ .Values.postgresql.readReplica.replicaCount }}
+  selector:
+    matchLabels:
+      app: postgres-read
+  template:
+    metadata:
+      labels:
+        app: postgres-read
+        {{- include "koral.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres-read
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: "koral"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: DB_PASS
+            # Configure as streaming replica
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          command:
+            - bash
+            - -c
+            - |
+              # Wait for primary to be ready
+              until pg_isready -h postgres -U koral; do
+                echo "Waiting for primary..."
+                sleep 2
+              done
+              # Create base backup from primary if data dir is empty
+              if [ ! -f "$PGDATA/PG_VERSION" ]; then
+                pg_basebackup -h postgres -U koral -D $PGDATA -Fp -Xs -R -P
+              fi
+              # Start in replica mode
+              exec postgres -c hot_standby=on
+          volumeMounts:
+            - name: read-replica-storage
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+          resources:
+            {{- toYaml .Values.postgresql.readReplica.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "koral"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "koral"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: read-replica-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if or .Values.postgresql.readReplica.storage.storageClass .Values.global.storageClass }}
+        storageClassName: {{ .Values.postgresql.readReplica.storage.storageClass | default .Values.global.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.readReplica.storage.size | default "20Gi" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-read
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    app: postgres-read
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: postgres-read
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP
+{{- end }}

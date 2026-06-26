@@ -1,0 +1,37 @@
+{{- if .Values.mtls.enabled }}
+{{- $ns := include "koral.namespace" . }}
+{{- $duration := .Values.mtls.certificates.duration | default "2160h" }}
+{{- $renewBefore := .Values.mtls.certificates.renewBefore | default "360h" }}
+
+{{- $services := list "backend" "ai-engine" "correlation-engine" "remediation-planner" "approval-engine" "sandbox-executor" "verification-engine" "notifier" }}
+
+{{- range $svc := $services }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $svc }}-mtls
+  namespace: {{ $ns }}
+  labels:
+    app: {{ $svc }}
+spec:
+  secretName: {{ $svc }}-mtls-secret
+  duration: {{ $duration }}
+  renewBefore: {{ $renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - {{ $svc }}
+    - {{ $svc }}.{{ $ns }}
+    - {{ $svc }}.{{ $ns }}.svc
+    - {{ $svc }}.{{ $ns }}.svc.cluster.local
+  issuerRef:
+    name: koral-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}
+{{- end }}

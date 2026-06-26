@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────────────────────────
+# KORAL — Staging Environment Overrides
+# Usage: helm install koral ./helm/koral -f helm/koral/values-staging.yaml
+# ─────────────────────────────────────────────────────────────────────
+
+global:
+  namespace: koral-staging
+
+backend:
+  replicaCount: 2
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+  env:
+    logLevel: INFO
+    disableAuth: "false"
+
+aiEngine:
+  replicaCount: 1
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+
+correlationEngine:
+  replicaCount: 1
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+
+agents:
+  pollInterval: "15"
+  zThreshold: "2.5"
+
+remediationPlanner:
+  enabled: true
+  env:
+    remediationEnabled: "true"
+
+approvalEngine:
+  enabled: true
+
+sandboxExecutor:
+  enabled: true
+  env:
+    dryRun: "true"
+
+verificationEngine:
+  enabled: true
+
+notifier:
+  enabled: true
+  env:
+    disableSlack: "false"
+
+postgresql:
+  storage:
+    size: 20Gi
+
+prometheus:
+  retentionDays: 15
+  storage:
+    size: 30Gi
+
+ingress:
+  enabled: true
+  hosts:
+    - host: koral-staging.example.com
+      paths:
+        - path: /
+          service: frontend
+          port: 3000
+    - host: api-staging.koral.example.com
+      paths:
+        - path: /
+          service: backend
+          port: 8000
+  tls:
+    - secretName: koral-staging-tls
+      hosts:
+        - koral-staging.example.com
+        - api-staging.koral.example.com
+
+networkPolicies:
+  enabled: true

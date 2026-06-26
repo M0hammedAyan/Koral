@@ -1,0 +1,46 @@
+{{- if .Values.mtls.enabled }}
+# Self-signed root CA for internal mTLS between KORAL services
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: koral-selfsigned-issuer
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+# Root CA Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: koral-ca
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: koral-internal-ca
+  secretName: koral-ca-secret
+  duration: {{ .Values.mtls.ca.duration | default "8760h" }}
+  renewBefore: {{ .Values.mtls.ca.renewBefore | default "720h" }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: koral-selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+# CA Issuer — signs all service certificates
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: koral-ca-issuer
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: koral-ca-secret
+{{- end }}

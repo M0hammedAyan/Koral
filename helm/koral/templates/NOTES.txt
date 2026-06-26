@@ -1,0 +1,52 @@
+═══════════════════════════════════════════════════════════════
+  KORAL — AIOps Platform for Kubernetes
+═══════════════════════════════════════════════════════════════
+
+Your KORAL installation is being deployed to namespace: {{ include "koral.namespace" . }}
+
+📋 Services deployed:
+{{- if .Values.backend.enabled }}
+  ✓ Backend API        (port {{ .Values.backend.service.port }})
+{{- end }}
+{{- if .Values.aiEngine.enabled }}
+  ✓ AI Engine          (port {{ .Values.aiEngine.service.port }})
+{{- end }}
+{{- if .Values.correlationEngine.enabled }}
+  ✓ Correlation Engine (port {{ .Values.correlationEngine.service.port }})
+{{- end }}
+{{- if .Values.frontend.enabled }}
+  ✓ Frontend           (port {{ .Values.frontend.service.port }})
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+  ✓ PostgreSQL         (port 5432)
+{{- end }}
+{{- if .Values.redis.enabled }}
+  ✓ Redis              (port 6379)
+{{- end }}
+{{- if .Values.prometheus.enabled }}
+  ✓ Prometheus         (port 9090)
+{{- end }}
+{{- if .Values.alertmanager.enabled }}
+  ✓ AlertManager       (port 9093)
+{{- end }}
+
+🔗 Access the application:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else }}
+  kubectl port-forward svc/frontend 3000:3000 -n {{ include "koral.namespace" . }}
+  kubectl port-forward svc/backend 8000:8000 -n {{ include "koral.namespace" . }}
+{{- end }}
+
+📖 API Documentation:
+  http://localhost:8000/docs (after port-forward)
+
+⚠️  IMPORTANT: Set your secrets before going to production:
+  helm upgrade {{ .Release.Name }} ./helm/koral \
+    --set secrets.apiKey=<your-key> \
+    --set secrets.jwtSecret=<your-secret> \
+    --set secrets.dbPass=<your-password>
+
+═══════════════════════════════════════════════════════════════

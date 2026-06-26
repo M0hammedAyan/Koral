@@ -1,0 +1,100 @@
+{{- $root := . -}}
+{{- $ns := include "koral.namespace" . -}}
+{{- $registry := .Values.global.imageRegistry -}}
+{{- $backendPort := .Values.backend.service.port -}}
+{{- $pollInterval := .Values.agents.pollInterval -}}
+{{- $zThreshold := .Values.agents.zThreshold -}}
+
+{{- $agents := dict
+  "cpu" .Values.agents.cpu
+  "memory" .Values.agents.memory
+  "storage" .Values.agents.storage
+  "log" .Values.agents.log
+}}
+
+{{- range $name, $agent := $agents }}
+{{- if $agent.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-agent
+  namespace: {{ $ns }}
+  labels:
+    app: {{ $name }}-agent
+    {{- include "koral.labels" $root | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $name }}-agent
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}-agent
+        {{- include "koral.labels" $root | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $agent.port | quote }}
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- include "koral.imagePullSecrets" $root | nindent 6 }}
+      serviceAccountName: koral-agent-sa
+      containers:
+        - name: {{ $name }}-agent
+          image: {{ include "koral.image" (dict "registry" $registry "repository" $agent.image.repository "tag" $agent.image.tag) }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ $agent.port }}
+              name: http
+          env:
+            - name: BACKEND_URL
+              value: "http://backend:{{ $backendPort }}"
+            - name: NAMESPACE
+              value: {{ $ns }}
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+            - name: Z_THRESHOLD
+              value: {{ $zThreshold | quote }}
+            - name: POLL_INTERVAL
+              value: {{ $pollInterval | quote }}
+            {{- if and (eq $name "log") $agent.env }}
+            - name: FLUENTD_HOST
+              value: {{ $agent.env.fluentdHost | quote }}
+            - name: FLUENTD_PORT
+              value: {{ $agent.env.fluentdPort | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml $agent.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ $agent.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ $agent.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-agent
+  namespace: {{ $ns }}
+  labels:
+    app: {{ $name }}-agent
+    {{- include "koral.labels" $root | nindent 4 }}
+spec:
+  selector:
+    app: {{ $name }}-agent
+  ports:
+    - port: {{ $agent.port }}
+      targetPort: {{ $agent.port }}
+      protocol: TCP
+      name: http
+  type: ClusterIP
+{{- end }}
+{{- end }}

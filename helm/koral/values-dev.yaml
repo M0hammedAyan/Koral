@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────
+# KORAL — Development Environment Overrides
+# Usage: helm install koral ./helm/koral -f helm/koral/values-dev.yaml
+# ─────────────────────────────────────────────────────────────────────
+
+global:
+  namespace: koral-dev
+
+backend:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  pdb:
+    enabled: false
+  env:
+    logLevel: DEBUG
+    disableAuth: "true"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+aiEngine:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  pdb:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+correlationEngine:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  pdb:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+agents:
+  pollInterval: "30"
+  zThreshold: "3.0"
+
+remediationPlanner:
+  enabled: false
+
+approvalEngine:
+  enabled: false
+
+sandboxExecutor:
+  enabled: false
+
+verificationEngine:
+  enabled: false
+
+notifier:
+  enabled: false
+
+frontend:
+  replicaCount: 1
+
+postgresql:
+  storage:
+    size: 5Gi
+
+prometheus:
+  retentionDays: 7
+  storage:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: false
+
+networkPolicies:
+  enabled: false
+
+secrets:
+  apiKey: "dev-api-key"
+  apiKeyAdmin: "dev-admin-key"
+  apiKeyOperator: "dev-operator-key"
+  apiKeyViewer: "dev-viewer-key"
+  jwtSecret: "dev-jwt-secret-not-for-production"
+  dbUser: koral
+  dbPass: "dev-password"

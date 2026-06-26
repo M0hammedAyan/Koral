@@ -1,0 +1,113 @@
+{{- if .Values.correlationEngine.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: correlation-engine
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    app: correlation-engine
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.correlationEngine.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: correlation-engine
+  template:
+    metadata:
+      labels:
+        app: correlation-engine
+        {{- include "koral.labels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8005"
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- include "koral.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: correlation-engine
+          image: {{ include "koral.image" (dict "registry" .Values.global.imageRegistry "repository" .Values.correlationEngine.image.repository "tag" .Values.correlationEngine.image.tag) }}
+          imagePullPolicy: {{ .Values.correlationEngine.image.pullPolicy }}
+          ports:
+            - containerPort: 8005
+              name: http
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+            - name: BACKEND_URL
+              value: "http://backend:{{ .Values.backend.service.port }}"
+            {{- if .Values.mtls.enabled }}
+            - name: MTLS_ENABLED
+              value: "true"
+            - name: TLS_CERT_PATH
+              value: "/etc/koral/certs/tls.crt"
+            - name: TLS_KEY_PATH
+              value: "/etc/koral/certs/tls.key"
+            - name: TLS_CA_PATH
+              value: "/etc/koral/ca/ca.crt"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.correlationEngine.resources | nindent 12 }}
+          {{- if .Values.mtls.enabled }}
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/koral/certs
+              readOnly: true
+            - name: ca-cert
+              mountPath: /etc/koral/ca
+              readOnly: true
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+      {{- if .Values.mtls.enabled }}
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: correlation-engine-mtls-secret
+        - name: ca-cert
+          secret:
+            secretName: koral-ca-secret
+            items:
+              - key: ca.crt
+                path: ca.crt
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: correlation-engine
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    app: correlation-engine
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: correlation-engine
+  ports:
+    - port: {{ .Values.correlationEngine.service.port }}
+      targetPort: 8005
+      protocol: TCP
+      name: http
+  type: {{ .Values.correlationEngine.service.type }}
+{{- end }}

@@ -1,0 +1,290 @@
+{{- $ns := include "koral.namespace" . -}}
+{{- $registry := .Values.global.imageRegistry -}}
+{{- $backendPort := .Values.backend.service.port -}}
+
+{{- if .Values.remediationPlanner.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-planner
+  namespace: {{ $ns }}
+  labels:
+    app: remediation-planner
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.remediationPlanner.replicaCount }}
+  selector:
+    matchLabels:
+      app: remediation-planner
+  template:
+    metadata:
+      labels:
+        app: remediation-planner
+        {{- include "koral.labels" . | nindent 8 }}
+    spec:
+      {{- include "koral.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: remediation-planner
+          image: {{ include "koral.image" (dict "registry" $registry "repository" .Values.remediationPlanner.image.repository "tag" .Values.remediationPlanner.image.tag) }}
+          imagePullPolicy: {{ .Values.remediationPlanner.image.pullPolicy }}
+          ports:
+            - containerPort: 8007
+          env:
+            - name: BACKEND_URL
+              value: "http://backend:{{ $backendPort }}"
+            - name: AI_ENGINE_URL
+              value: "http://ai-engine:{{ .Values.aiEngine.service.port }}"
+            - name: REMEDIATION_ENABLED
+              value: {{ .Values.remediationPlanner.env.remediationEnabled | quote }}
+            - name: REMEDIATION_TIMEOUT
+              value: {{ .Values.remediationPlanner.env.remediationTimeout | quote }}
+          resources:
+            {{- toYaml .Values.remediationPlanner.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: remediation-planner
+  namespace: {{ $ns }}
+  labels:
+    app: remediation-planner
+spec:
+  selector:
+    app: remediation-planner
+  ports:
+    - port: {{ .Values.remediationPlanner.service.port }}
+      targetPort: 8007
+  type: {{ .Values.remediationPlanner.service.type }}
+{{- end }}
+
+{{- if .Values.approvalEngine.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: approval-engine
+  namespace: {{ $ns }}
+  labels:
+    app: approval-engine
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.approvalEngine.replicaCount }}
+  selector:
+    matchLabels:
+      app: approval-engine
+  template:
+    metadata:
+      labels:
+        app: approval-engine
+        {{- include "koral.labels" . | nindent 8 }}
+    spec:
+      {{- include "koral.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: approval-engine
+          image: {{ include "koral.image" (dict "registry" $registry "repository" .Values.approvalEngine.image.repository "tag" .Values.approvalEngine.image.tag) }}
+          imagePullPolicy: {{ .Values.approvalEngine.image.pullPolicy }}
+          ports:
+            - containerPort: 8008
+          env:
+            - name: BACKEND_URL
+              value: "http://backend:{{ $backendPort }}"
+            - name: APPROVAL_TIMEOUT_MINUTES
+              value: {{ .Values.approvalEngine.env.approvalTimeoutMinutes | quote }}
+            - name: AUTO_APPROVE_MINOR
+              value: {{ .Values.approvalEngine.env.autoApproveMinor | quote }}
+            - name: DISABLE_EMAIL
+              value: {{ .Values.approvalEngine.env.disableEmail | quote }}
+          resources:
+            {{- toYaml .Values.approvalEngine.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: approval-engine
+  namespace: {{ $ns }}
+  labels:
+    app: approval-engine
+spec:
+  selector:
+    app: approval-engine
+  ports:
+    - port: {{ .Values.approvalEngine.service.port }}
+      targetPort: 8008
+  type: {{ .Values.approvalEngine.service.type }}
+{{- end }}
+
+{{- if .Values.sandboxExecutor.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox-executor
+  namespace: {{ $ns }}
+  labels:
+    app: sandbox-executor
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.sandboxExecutor.replicaCount }}
+  selector:
+    matchLabels:
+      app: sandbox-executor
+  template:
+    metadata:
+      labels:
+        app: sandbox-executor
+        {{- include "koral.labels" . | nindent 8 }}
+    spec:
+      {{- include "koral.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: sandbox-executor
+          image: {{ include "koral.image" (dict "registry" $registry "repository" .Values.sandboxExecutor.image.repository "tag" .Values.sandboxExecutor.image.tag) }}
+          imagePullPolicy: {{ .Values.sandboxExecutor.image.pullPolicy }}
+          ports:
+            - containerPort: 8009
+          env:
+            - name: BACKEND_URL
+              value: "http://backend:{{ $backendPort }}"
+            - name: REMEDIATION_PLANNER_URL
+              value: "http://remediation-planner:{{ .Values.remediationPlanner.service.port }}"
+            - name: DRY_RUN
+              value: {{ .Values.sandboxExecutor.env.dryRun | quote }}
+            - name: REMEDIATION_MAX_PODS_PER_FIX
+              value: {{ .Values.sandboxExecutor.env.maxPodsPerFix | quote }}
+            - name: NAMESPACE
+              value: {{ $ns }}
+          resources:
+            {{- toYaml .Values.sandboxExecutor.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox-executor
+  namespace: {{ $ns }}
+  labels:
+    app: sandbox-executor
+spec:
+  selector:
+    app: sandbox-executor
+  ports:
+    - port: {{ .Values.sandboxExecutor.service.port }}
+      targetPort: 8009
+  type: {{ .Values.sandboxExecutor.service.type }}
+{{- end }}
+
+{{- if .Values.verificationEngine.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verification-engine
+  namespace: {{ $ns }}
+  labels:
+    app: verification-engine
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.verificationEngine.replicaCount }}
+  selector:
+    matchLabels:
+      app: verification-engine
+  template:
+    metadata:
+      labels:
+        app: verification-engine
+        {{- include "koral.labels" . | nindent 8 }}
+    spec:
+      {{- include "koral.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: verification-engine
+          image: {{ include "koral.image" (dict "registry" $registry "repository" .Values.verificationEngine.image.repository "tag" .Values.verificationEngine.image.tag) }}
+          imagePullPolicy: {{ .Values.verificationEngine.image.pullPolicy }}
+          ports:
+            - containerPort: 8010
+          env:
+            - name: BACKEND_URL
+              value: "http://backend:{{ $backendPort }}"
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+            - name: VERIFICATION_WAIT_SECONDS
+              value: {{ .Values.verificationEngine.env.verificationWaitSeconds | quote }}
+            - name: VERIFICATION_SUCCESS_THRESHOLD
+              value: {{ .Values.verificationEngine.env.successThreshold | quote }}
+            - name: Z_SCORE_IMPROVEMENT_TARGET
+              value: {{ .Values.verificationEngine.env.zScoreImprovementTarget | quote }}
+          resources:
+            {{- toYaml .Values.verificationEngine.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: verification-engine
+  namespace: {{ $ns }}
+  labels:
+    app: verification-engine
+spec:
+  selector:
+    app: verification-engine
+  ports:
+    - port: {{ .Values.verificationEngine.service.port }}
+      targetPort: 8010
+  type: {{ .Values.verificationEngine.service.type }}
+{{- end }}
+
+{{- if .Values.notifier.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifier
+  namespace: {{ $ns }}
+  labels:
+    app: notifier
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.notifier.replicaCount }}
+  selector:
+    matchLabels:
+      app: notifier
+  template:
+    metadata:
+      labels:
+        app: notifier
+        {{- include "koral.labels" . | nindent 8 }}
+    spec:
+      {{- include "koral.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: notifier
+          image: {{ include "koral.image" (dict "registry" $registry "repository" .Values.notifier.image.repository "tag" .Values.notifier.image.tag) }}
+          imagePullPolicy: {{ .Values.notifier.image.pullPolicy }}
+          ports:
+            - containerPort: 8011
+          env:
+            - name: SLACK_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: SLACK_WEBHOOK_URL
+            - name: DISABLE_EMAIL
+              value: {{ .Values.notifier.env.disableEmail | quote }}
+            - name: DISABLE_TELEGRAM
+              value: {{ .Values.notifier.env.disableTelegram | quote }}
+            - name: DISABLE_SLACK
+              value: {{ .Values.notifier.env.disableSlack | quote }}
+          resources:
+            {{- toYaml .Values.notifier.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifier
+  namespace: {{ $ns }}
+  labels:
+    app: notifier
+spec:
+  selector:
+    app: notifier
+  ports:
+    - port: {{ .Values.notifier.service.port }}
+      targetPort: 8011
+  type: {{ .Values.notifier.service.type }}
+{{- end }}

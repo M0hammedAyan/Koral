@@ -1,7 +1,9 @@
 """Role-based access control for KORAL backend."""
 import os
 import hmac
+import hashlib
 from enum import IntEnum
+from datetime import datetime, timezone
 from fastapi import Depends, HTTPException, Header
 from typing import Optional
 
@@ -30,12 +32,42 @@ _LEGACY_KEY = os.getenv("API_KEY")
 
 
 def _resolve_role_from_api_key(api_key: str) -> Optional[Role]:
+    """Check env-var keys first, then fall back to user DB lookup."""
     for role, key in _ROLE_KEYS.items():
         if key and hmac.compare_digest(api_key, key):
             return role
     if _LEGACY_KEY and hmac.compare_digest(api_key, _LEGACY_KEY):
         return Role.OPERATOR
-    return None
+
+    # Check user-managed keys in the database
+    return _resolve_role_from_user_key(api_key)
+
+
+def _resolve_role_from_user_key(api_key: str) -> Optional[Role]:
+    """Look up a user's hashed API key in the database."""
+    try:
+        from backend.database import query_one, DB_TYPE
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        placeholder = "%s" if DB_TYPE == "postgres" else "?"
+        sql = f"SELECT role, is_active, key_expires_at FROM users WHERE api_key_hash={placeholder}"
+        user = query_one(sql, (key_hash,))
+        if not user:
+            return None
+        if not user.get("is_active", True):
+            return None
+        # Check key expiry
+        expires_at = user.get("key_expires_at")
+        if expires_at:
+            try:
+                expiry = datetime.fromisoformat(expires_at)
+                if expiry < datetime.now(timezone.utc):
+                    return None  # Key expired
+            except (ValueError, TypeError):
+                pass
+        role_str = user.get("role", "viewer").upper()
+        return Role[role_str]
+    except Exception:
+        return None
 
 
 def _resolve_role_from_jwt(token: str) -> Optional[Role]:

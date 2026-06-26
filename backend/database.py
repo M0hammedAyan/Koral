@@ -7,7 +7,7 @@ import time
 from contextlib import nullcontext
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
-from database.pool import close_pool, install_psycopg2_pool, get_pool_status
+from database.pool import close_pool, install_psycopg2_pool, get_pool_status, get_read_engine
 
 try:
     from prometheus_client import Histogram, Gauge
@@ -66,6 +66,10 @@ if DB_TYPE == "sqlite":
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _get_read_db():
+        """SQLite has no replicas — return the same connection."""
+        return _get_db()
+
 # ── PostgreSQL Setup ───────────────────────────────────────────────
 else:
     install_psycopg2_pool()
@@ -77,6 +81,10 @@ else:
     DB_NAME = os.getenv("DB_NAME", "koral")
     DB_USER = os.getenv("DB_USER", "koral")
     DB_PASS = os.getenv("DB_PASS", "")
+
+    # Read replica config (optional)
+    DB_READ_HOST = os.getenv("DB_READ_HOST", "").strip()
+    DB_READ_PORT = int(os.getenv("DB_READ_PORT", DB_PORT))
     
     def _get_db():
         # respect DB connect timeout env var
@@ -88,6 +96,22 @@ else:
             user=DB_USER,
             password=DB_PASS,
             connect_timeout=connect_timeout,
+        )
+        return conn
+
+    def _get_read_db():
+        """Get a read-only connection (replica if configured, else primary)."""
+        connect_timeout = int(os.getenv("DB_TIMEOUT_DB", "3"))
+        host = DB_READ_HOST if DB_READ_HOST else DB_HOST
+        port = DB_READ_PORT if DB_READ_HOST else DB_PORT
+        conn = psycopg2.connect(
+            host=host,
+            port=port,
+            database=DB_NAME,
+            user=DB_USER,
+            password=DB_PASS,
+            connect_timeout=connect_timeout,
+            options="-c default_transaction_read_only=on" if DB_READ_HOST else "",
         )
         return conn
 
@@ -161,6 +185,55 @@ def init_db():
                     payload TEXT,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    email TEXT NOT NULL UNIQUE,
+                    role TEXT NOT NULL DEFAULT 'viewer',
+                    api_key_hash TEXT NOT NULL,
+                    key_expires_at TEXT,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    tenant_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_users_api_key_hash ON users(api_key_hash);
+                CREATE INDEX IF NOT EXISTS ix_users_role ON users(role);
+                CREATE INDEX IF NOT EXISTS ix_users_tenant_id ON users(tenant_id);
+                CREATE TABLE IF NOT EXISTS tenants (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS tenant_namespaces (
+                    tenant_id TEXT NOT NULL,
+                    namespace TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, namespace),
+                    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+                );
+                CREATE INDEX IF NOT EXISTS ix_tenant_namespaces_ns ON tenant_namespaces(namespace);
+                CREATE TABLE IF NOT EXISTS federated_clusters (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    api_endpoint TEXT NOT NULL,
+                    region TEXT DEFAULT '',
+                    provider TEXT DEFAULT '',
+                    cluster_token TEXT NOT NULL,
+                    tenant_id TEXT,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    status TEXT DEFAULT 'registered',
+                    node_count INTEGER DEFAULT 0,
+                    pod_count INTEGER DEFAULT 0,
+                    anomaly_count_24h INTEGER DEFAULT 0,
+                    incident_count_24h INTEGER DEFAULT 0,
+                    last_heartbeat TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
             """)
         else:
             cursor.execute("SELECT 1")
@@ -176,9 +249,9 @@ def close_db_pool():
 
 # ── Query Helpers ──────────────────────────────────────────────────
 def query_one(sql: str, params: tuple = ()) -> Optional[dict]:
-    """Execute query and return first row as dict"""
+    """Execute query and return first row as dict (uses read replica if available)"""
     started = time.perf_counter()
-    conn = _get_db()
+    conn = _get_read_db() if DB_TYPE == "postgres" else _get_db()
     try:
         span_ctx = TRACER.start_as_current_span("db.query_one") if TRACER else nullcontext()
         with span_ctx as span:
@@ -201,9 +274,9 @@ def query_one(sql: str, params: tuple = ()) -> Optional[dict]:
 
 
 def query_all(sql: str, params: tuple = ()) -> List[dict]:
-    """Execute query and return all rows as list of dicts"""
+    """Execute query and return all rows as list of dicts (uses read replica if available)"""
     started = time.perf_counter()
-    conn = _get_db()
+    conn = _get_read_db() if DB_TYPE == "postgres" else _get_db()
     try:
         span_ctx = TRACER.start_as_current_span("db.query_all") if TRACER else nullcontext()
         with span_ctx as span:

@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for KORAL Frontend
+# Multi-stage Dockerfile for KORAL Frontend (Vite)
 # Production-grade with security hardening
 
 # Stage 1: Build
@@ -7,16 +7,15 @@ FROM node:18-alpine AS build
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 
-# Install dependencies needed for the build stage
-RUN npm install --include=dev && \
-    npm cache clean --force
+# Install dependencies
+RUN npm install && npm cache clean --force
 
 # Copy source code
 COPY . .
 
-# Build application
+# Build application with Vite
 RUN npm run build
 
 # Stage 2: Runtime
@@ -28,17 +27,14 @@ RUN apk add --no-cache curl
 # Create non-root user for nginx
 RUN addgroup -g 101 nginx && adduser -D -u 101 -G nginx nginx || true
 
-# Copy built application from builder
-COPY --from=build --chown=nginx:nginx /app/build /usr/share/nginx/html
+# Copy built application from builder (Vite outputs to dist/)
+COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
-# Copy nginx main configuration (before switching user to avoid pid permission issues)
+# Copy nginx main configuration
 COPY nginx-main.conf /etc/nginx/nginx.conf
 
 # Copy nginx site configuration
 COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
-
-# Security: Remove default nginx files
-RUN rm -f /etc/nginx/conf.d/default.conf.bak
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /var/cache/nginx /var/log/nginx /run/nginx && \

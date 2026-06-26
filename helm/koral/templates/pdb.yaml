@@ -1,0 +1,44 @@
+{{- if .Values.backend.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.backend.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: backend
+{{- end }}
+---
+{{- if .Values.aiEngine.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-engine-pdb
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.aiEngine.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: ai-engine
+{{- end }}
+---
+{{- if .Values.correlationEngine.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: correlation-engine-pdb
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.correlationEngine.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: correlation-engine
+{{- end }}

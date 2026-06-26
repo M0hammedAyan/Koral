@@ -43,6 +43,10 @@ from backend.routes.fixes import router as fixes_router
 from backend.routes.remediation import router as remediation_router
 from backend.routes.audit import router as audit_router
 from backend.routes.slo import router as slo_router
+from backend.routes.users import router as users_router
+from backend.routes.tenants import router as tenants_router
+from backend.routes.federation import router as federation_router
+from backend.routes.sla import router as sla_guarantees_router
 from backend.websocket.manager import manager
 from backend.auth import get_allowed_origins, validate_api_key, DISABLE_AUTH
 from backend.database import init_db, close_db_pool, query_one
@@ -255,6 +259,10 @@ app.include_router(fixes_router)
 app.include_router(remediation_router)
 app.include_router(audit_router)
 app.include_router(slo_router)
+app.include_router(users_router)
+app.include_router(tenants_router)
+app.include_router(federation_router)
+app.include_router(sla_guarantees_router)
 
 
 async def _dependency_health(url: str) -> bool:
@@ -334,23 +342,47 @@ def root():
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time updates"""
+    """WebSocket endpoint for real-time updates with role-aware RBAC.
+
+    Authentication via query param or header:
+      - ws://host/ws/live?api_key=<key>
+      - Header: X-API-Key: <key>
+
+    Supports env-var keys (admin/operator/viewer) and user-managed keys.
+    Messages are filtered by role — admin-only events won't reach viewers.
+    """
+    from backend.websocket.manager import authenticate_websocket, WSRole
+
     if not DISABLE_AUTH:
         api_key = websocket.query_params.get("api_key") or websocket.headers.get("X-API-Key")
-        valid_key = os.getenv("API_KEY")
-        if not api_key or not valid_key or not hmac.compare_digest(api_key, valid_key):
+        auth_result = authenticate_websocket(api_key)
+        if auth_result is None:
             await websocket.close(code=4401)
             return
-    await manager.connect(websocket)
-    WEBSOCKET_CLIENTS.set(len(manager.active))
+        role, username = auth_result
+    else:
+        role, username = WSRole.ADMIN, "development"
+
+    conn = await manager.connect(websocket, role=role, username=username)
+    WEBSOCKET_CLIENTS.set(manager.get_connection_count())
+
     try:
         while True:
-            # Keep connection alive and receive any client messages
-            await websocket.receive_text()
+            data = await websocket.receive_text()
+            # Handle client subscription messages
+            try:
+                import json as _json
+                msg = _json.loads(data)
+                if msg.get("type") == "subscribe" and "channel" in msg:
+                    conn.subscriptions.add(msg["channel"])
+                elif msg.get("type") == "unsubscribe" and "channel" in msg:
+                    conn.subscriptions.discard(msg["channel"])
+            except (ValueError, TypeError):
+                pass
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        WEBSOCKET_CLIENTS.set(len(manager.active))
+        WEBSOCKET_CLIENTS.set(manager.get_connection_count())
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(websocket)
-        WEBSOCKET_CLIENTS.set(len(manager.active))
+        WEBSOCKET_CLIENTS.set(manager.get_connection_count())

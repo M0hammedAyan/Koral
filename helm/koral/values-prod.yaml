@@ -1,0 +1,247 @@
+# ─────────────────────────────────────────────────────────────────────
+# KORAL — Production Environment Overrides
+# Usage: helm install koral ./helm/koral -f helm/koral/values-prod.yaml --set secrets.apiKey=...
+# ─────────────────────────────────────────────────────────────────────
+
+global:
+  namespace: koral-system
+  imageRegistry: "ghcr.io/m0hammedayan"
+
+backend:
+  replicaCount: 3
+  image:
+    pullPolicy: Always
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilization: 65
+  pdb:
+    enabled: true
+    minAvailable: 2
+  env:
+    logLevel: WARNING
+    disableAuth: "false"
+    allowedOrigins: "https://koral.example.com"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+
+aiEngine:
+  replicaCount: 3
+  image:
+    pullPolicy: Always
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilization: 65
+  pdb:
+    enabled: true
+    minAvailable: 2
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 4000m
+      memory: 2Gi
+
+correlationEngine:
+  replicaCount: 3
+  image:
+    pullPolicy: Always
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilization: 65
+  pdb:
+    enabled: true
+    minAvailable: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+
+agents:
+  pollInterval: "10"
+  zThreshold: "2.5"
+  cpu:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+  memory:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+  storage:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+  log:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+
+remediationPlanner:
+  enabled: true
+  replicaCount: 2
+  env:
+    remediationEnabled: "true"
+    remediationTimeout: "600"
+
+approvalEngine:
+  enabled: true
+  replicaCount: 2
+  env:
+    disableEmail: "false"
+
+sandboxExecutor:
+  enabled: true
+  replicaCount: 2
+  env:
+    dryRun: "false"
+
+verificationEngine:
+  enabled: true
+  replicaCount: 2
+
+notifier:
+  enabled: true
+  replicaCount: 2
+  env:
+    disableEmail: "false"
+    disableTelegram: "false"
+    disableSlack: "false"
+
+frontend:
+  replicaCount: 2
+  image:
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+postgresql:
+  storage:
+    size: 100Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 4Gi
+  readReplica:
+    enabled: true
+    replicaCount: 2
+    storage:
+      size: 100Gi
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 4000m
+        memory: 4Gi
+
+redis:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+prometheus:
+  retentionDays: 90
+  storage:
+    size: 200Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 4Gi
+
+alertmanager:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+fluentbit:
+  enabled: true
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: koral.example.com
+      paths:
+        - path: /
+          service: frontend
+          port: 3000
+    - host: api.koral.example.com
+      paths:
+        - path: /
+          service: backend
+          port: 8000
+  tls:
+    - secretName: koral-tls
+      hosts:
+        - koral.example.com
+        - api.koral.example.com
+
+networkPolicies:
+  enabled: true
+
+# Enable mTLS for all inter-service communication in production
+mtls:
+  enabled: true
+  ca:
+    duration: "8760h"
+    renewBefore: "720h"
+  certificates:
+    duration: "2160h"
+    renewBefore: "360h"

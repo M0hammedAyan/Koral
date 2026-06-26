@@ -1,0 +1,427 @@
+# ─────────────────────────────────────────────────────────────────────
+# KORAL Helm Chart — Default Values
+# Override per environment using values-dev.yaml / values-prod.yaml
+# ─────────────────────────────────────────────────────────────────────
+
+global:
+  namespace: koral-system
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# ── Backend ──────────────────────────────────────────────────────────
+backend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: koral-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+  env:
+    logLevel: INFO
+    allowedOrigins: "http://localhost:3000,http://frontend:3000"
+    disableAuth: "false"
+  serviceAccount:
+    create: true
+    name: koral-backend-sa
+
+# ── AI Engine ────────────────────────────────────────────────────────
+aiEngine:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: koral-ai-engine
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8006
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilization: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+  env:
+    smtpHost: smtp.gmail.com
+    smtpPort: "587"
+    alertEmail: ""
+
+# ── Correlation Engine ───────────────────────────────────────────────
+correlationEngine:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: koral-correlation-engine
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8005
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilization: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+# ── Agents ───────────────────────────────────────────────────────────
+agents:
+  pollInterval: "10"
+  zThreshold: "2.5"
+  cpu:
+    enabled: true
+    image:
+      repository: koral-cpu-agent
+      tag: latest
+    port: 8001
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  memory:
+    enabled: true
+    image:
+      repository: koral-memory-agent
+      tag: latest
+    port: 8002
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  storage:
+    enabled: true
+    image:
+      repository: koral-storage-agent
+      tag: latest
+    port: 8003
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  log:
+    enabled: true
+    image:
+      repository: koral-log-agent
+      tag: latest
+    port: 8004
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    env:
+      fluentdHost: fluentd
+      fluentdPort: "9880"
+
+# ── Remediation Pipeline ─────────────────────────────────────────────
+remediationPlanner:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: koral-remediation-planner
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8007
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    remediationEnabled: "false"
+    remediationTimeout: "300"
+
+approvalEngine:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: koral-approval-engine
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8008
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    approvalTimeoutMinutes: "30"
+    autoApproveMinor: "false"
+    disableEmail: "true"
+
+sandboxExecutor:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: koral-sandbox-executor
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8009
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    dryRun: "true"
+    maxPodsPerFix: "5"
+
+verificationEngine:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: koral-verification-engine
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8010
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    verificationWaitSeconds: "60"
+    successThreshold: "0.7"
+    zScoreImprovementTarget: "1.5"
+
+notifier:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: koral-notifier
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8011
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  env:
+    disableEmail: "true"
+    disableTelegram: "true"
+    disableSlack: "true"
+
+# ── Frontend ─────────────────────────────────────────────────────────
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: koral-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── PostgreSQL ───────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 16-alpine
+  storage:
+    size: 20Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  readReplica:
+    enabled: false
+    replicaCount: 1
+    storage:
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+# ── Redis ────────────────────────────────────────────────────────────
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ── Prometheus ───────────────────────────────────────────────────────
+prometheus:
+  enabled: true
+  image:
+    repository: prom/prometheus
+    tag: v2.51.0
+  retentionDays: 30
+  storage:
+    size: 50Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# ── AlertManager ─────────────────────────────────────────────────────
+alertmanager:
+  enabled: true
+  image:
+    repository: prom/alertmanager
+    tag: v0.27.0
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# ── Fluent Bit ───────────────────────────────────────────────────────
+fluentbit:
+  enabled: false
+  image:
+    repository: fluent/fluent-bit
+    tag: "2.2"
+
+# ── Ingress ──────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+  hosts:
+    - host: koral.example.com
+      paths:
+        - path: /
+          service: frontend
+          port: 3000
+    - host: api.koral.example.com
+      paths:
+        - path: /
+          service: backend
+          port: 8000
+  tls:
+    - secretName: koral-tls
+      hosts:
+        - koral.example.com
+        - api.koral.example.com
+
+# ── mTLS (cert-manager) ───────────────────────────────────────────────
+mtls:
+  enabled: false
+  ca:
+    duration: "8760h"      # 1 year
+    renewBefore: "720h"    # 30 days before expiry
+  certificates:
+    duration: "2160h"      # 90 days
+    renewBefore: "360h"    # 15 days before expiry
+
+# ── Network Policies ─────────────────────────────────────────────────
+networkPolicies:
+  enabled: true
+
+# ── Secrets (reference only — actual values via --set or sealed-secrets)
+secrets:
+  apiKey: ""
+  apiKeyAdmin: ""
+  apiKeyOperator: ""
+  apiKeyViewer: ""
+  jwtSecret: ""
+  dbUser: koral
+  dbPass: ""
+  openaiApiKey: ""
+  anthropicApiKey: ""
+  smtpUser: ""
+  smtpPass: ""
+  slackWebhookUrl: ""

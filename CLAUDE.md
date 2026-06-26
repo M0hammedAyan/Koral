@@ -14,6 +14,23 @@ Never optimize for demos, hackathons, temporary workarounds, mock implementation
 
 # Execution Status (as of 2026-06-16)
 
+## Enterprise Hardening (2026-06-26)
+
+| # | Task | Status |
+|---|---|---|
+| 1 | Helm chart — parameterized, multi-env, covering all K8s manifests | DONE |
+| 2 | mTLS between services using cert-manager integration | DONE |
+| 3 | Replace Z-score with Isolation Forest | DONE (previously completed) |
+| 4 | User management API — key rotation, invite, per-user audit log | DONE |
+| 5 | WebSocket RBAC — role-aware validation matching existing RBAC hierarchy | DONE |
+| 6 | PostgreSQL read replicas + table partitioning for anomaly/event tables | DONE |
+| 7 | Multi-tenancy — namespace isolation per team, tenant-scoped RBAC | DONE |
+| 8 | SBOM + supply chain — dependency scanning, signed images, provenance | DONE |
+| 9 | Improve Locust load tests — soak tests, latency percentile targets, chaos injection | DONE |
+| 10 | Migrate frontend from Create React App to Vite | DONE |
+| 11 | Multi-cluster federation | DONE |
+| 12 | SLA guarantees — graceful degradation, quantified uptime targets | DONE |
+
 ## Completed
 
 | Priority | Task | Status |

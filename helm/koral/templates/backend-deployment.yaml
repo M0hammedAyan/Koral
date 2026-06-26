@@ -1,0 +1,171 @@
+{{- if .Values.backend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    app: backend
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        {{- include "koral.labels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- include "koral.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ .Values.backend.serviceAccount.name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: backend
+          image: {{ include "koral.image" (dict "registry" .Values.global.imageRegistry "repository" .Values.backend.image.repository "tag" .Values.backend.image.tag) }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: DB_TYPE
+              value: "postgres"
+            - name: DB_HOST
+              value: "postgres"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "koral"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: DB_PASS
+            - name: CORRELATION_ENGINE_URL
+              value: "http://correlation-engine:{{ .Values.correlationEngine.service.port }}"
+            - name: AI_ENGINE_URL
+              value: "http://ai-engine:{{ .Values.aiEngine.service.port }}"
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+            {{- if .Values.postgresql.readReplica.enabled }}
+            - name: DB_READ_HOST
+              value: "postgres-read"
+            {{- end }}
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: API_KEY
+            - name: API_KEY_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: API_KEY_ADMIN
+            - name: API_KEY_OPERATOR
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: API_KEY_OPERATOR
+            - name: API_KEY_VIEWER
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: API_KEY_VIEWER
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: koral-secrets
+                  key: JWT_SECRET
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.backend.env.allowedOrigins | quote }}
+            - name: DISABLE_AUTH
+              value: {{ .Values.backend.env.disableAuth | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.backend.env.logLevel | quote }}
+            - name: NAMESPACE
+              value: {{ include "koral.namespace" . }}
+            {{- if .Values.mtls.enabled }}
+            - name: MTLS_ENABLED
+              value: "true"
+            - name: TLS_CERT_PATH
+              value: "/etc/koral/certs/tls.crt"
+            - name: TLS_KEY_PATH
+              value: "/etc/koral/certs/tls.key"
+            - name: TLS_CA_PATH
+              value: "/etc/koral/ca/ca.crt"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          {{- if .Values.mtls.enabled }}
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/koral/certs
+              readOnly: true
+            - name: ca-cert
+              mountPath: /etc/koral/ca
+              readOnly: true
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+      {{- if .Values.mtls.enabled }}
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: backend-mtls-secret
+        - name: ca-cert
+          secret:
+            secretName: koral-ca-secret
+            items:
+              - key: ca.crt
+                path: ca.crt
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: {{ include "koral.namespace" . }}
+  labels:
+    app: backend
+    {{- include "koral.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: {{ .Values.backend.service.port }}
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: {{ .Values.backend.service.type }}
+{{- end }}
