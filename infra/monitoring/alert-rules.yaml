@@ -1,92 +1,85 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: koral-alert-rules
-  namespace: koral-system
-data:
-  alert-rules.yaml: |
-    groups:
-      - name: koral.system
-        rules:
-          - alert: KoralBackendDown
-            expr: up{job="koral-backend"} == 0
-            for: 2m
-            labels:
-              severity: critical
-            annotations:
-              summary: "KORAL Backend is down"
-              description: "Backend service has been unreachable for 2 minutes."
+groups:
+  - name: koral.system
+    rules:
+      - alert: KoralBackendDown
+        expr: up{job="koral-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KORAL Backend is down"
+          description: "Backend service has been unreachable for 2 minutes."
 
-          - alert: KoralAIEngineDown
-            expr: up{job="koral-ai-engine"} == 0
-            for: 2m
-            labels:
-              severity: critical
-            annotations:
-              summary: "KORAL AI Engine is down"
-              description: "AI Engine has been unreachable for 2 minutes."
+      - alert: KoralAIEngineDown
+        expr: up{job="koral-ai-engine"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KORAL AI Engine is down"
+          description: "AI Engine has been unreachable for 2 minutes."
 
-          - alert: KoralCorrelationEngineDown
-            expr: up{job="koral-correlation-engine"} == 0
-            for: 2m
-            labels:
-              severity: warning
-            annotations:
-              summary: "KORAL Correlation Engine is down"
-              description: "Correlation Engine has been unreachable for 2 minutes."
+      - alert: KoralCorrelationEngineDown
+        expr: up{job="koral-correlation-engine"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "KORAL Correlation Engine is down"
+          description: "Correlation Engine has been unreachable for 2 minutes."
 
-          - alert: HighCPUUsage
-            expr: rate(container_cpu_usage_seconds_total{namespace="koral-system"}[5m]) > 0.8
-            for: 5m
-            labels:
-              severity: warning
-            annotations:
-              summary: "High CPU usage in KORAL namespace"
-              description: "Pod {{ $labels.pod }} CPU usage is {{ $value | humanizePercentage }}."
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{namespace="koral-system"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage in KORAL namespace"
+          description: "Pod {{ $labels.pod }} CPU usage is {{ $value | humanizePercentage }}."
 
-          - alert: HighMemoryUsage
-            expr: >
-              container_memory_working_set_bytes{namespace="koral-system"}
-              / container_spec_memory_limit_bytes{namespace="koral-system"} > 0.85
-            for: 5m
-            labels:
-              severity: warning
-            annotations:
-              summary: "High memory usage in KORAL namespace"
-              description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}."
+      - alert: HighMemoryUsage
+        expr: |
+          container_memory_working_set_bytes{namespace="koral-system"}
+          / container_spec_memory_limit_bytes{namespace="koral-system"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage in KORAL namespace"
+          description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}."
 
-          - alert: PodCrashLooping
-            expr: rate(kube_pod_container_status_restarts_total{namespace="koral-system"}[5m]) > 0
-            for: 5m
-            labels:
-              severity: critical
-            annotations:
-              summary: "Pod crash looping in koral-system"
-              description: "Pod {{ $labels.pod }} container {{ $labels.container }} is restarting."
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{namespace="koral-system"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod crash looping in koral-system"
+          description: "Pod {{ $labels.pod }} container {{ $labels.container }} is restarting."
 
-          - alert: PostgreSQLDown
-            expr: up{job="postgres"} == 0
-            for: 1m
-            labels:
-              severity: critical
-            annotations:
-              summary: "PostgreSQL is down"
-              description: "PostgreSQL has been unreachable for 1 minute."
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been unreachable for 1 minute."
 
-          - alert: KoralHighErrorRate
-            expr: rate(koral_backend_errors_total[5m]) > 0.1
-            for: 3m
-            labels:
-              severity: warning
-            annotations:
-              summary: "KORAL backend high error rate"
-              description: "Backend error rate is {{ $value }} errors/sec."
+      - alert: KoralHighErrorRate
+        expr: rate(koral_backend_errors_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "KORAL backend high error rate"
+          description: "Backend error rate is {{ $value }} errors/sec."
 
-          - alert: KoralAnomalySpike
-            expr: increase(koral_backend_requests_total[5m]) > 500
-            for: 2m
-            labels:
-              severity: info
-            annotations:
-              summary: "KORAL anomaly request spike"
-              description: "Unusually high request volume detected."
+      - alert: KoralAnomalySpike
+        expr: increase(koral_backend_requests_total[5m]) > 500
+        for: 2m
+        labels:
+          severity: info
+        annotations:
+          summary: "KORAL anomaly request spike"
+          description: "Unusually high request volume detected."

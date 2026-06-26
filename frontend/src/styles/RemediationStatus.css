@@ -33,40 +33,28 @@
 }
 
 .metric-card {
-  background: #1e293b;
-  border: 1px solid #475569;
-  border-radius: 12px;
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-radius: 6px;
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s;
   position: relative;
   overflow: hidden;
 }
 
-.metric-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #0ea5e9, transparent);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
+.metric-card::before { display: none; }
 
 .metric-card:hover {
-  border-color: #0ea5e9;
-  background: #334155;
-}
-
-.metric-card:hover::before {
-  opacity: 1;
+  border-color: #555555;
+  background: #252525;
 }
 
 .metric-label {
   font-size: 0.75rem;
-  color: #cbd5e1;
+  color: #808080;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -75,8 +63,9 @@
 .metric-value {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #f0f0f0;
   font-family: 'Monaco', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .metric-value.enabled { color: #10b981; }
@@ -102,7 +91,7 @@
 
 .operations-header h3 {
   margin: 0;
-  color: #f1f5f9;
+  color: #f0f0f0;
   font-size: 1rem;
   font-weight: 600;
 }
@@ -110,29 +99,30 @@
 .filter-buttons {
   display: flex;
   gap: 0.4rem;
+  flex-wrap: nowrap;
 }
 
 .filter-btn {
   padding: 0.4rem 0.75rem;
   background: transparent;
-  border: 1px solid #475569;
-  color: #cbd5e1;
-  border-radius: 6px;
+  border: 1px solid #333333;
+  color: #808080;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s, color 0.15s;
 }
 
 .filter-btn:hover {
-  border-color: #0ea5e9;
-  color: #f1f5f9;
+  border-color: #555555;
+  color: #f0f0f0;
 }
 
 .filter-btn.active {
-  background: rgba(14, 165, 233, 0.15);
-  border-color: #0ea5e9;
-  color: #0ea5e9;
+  background: transparent;
+  border-color: #3b82f6;
+  color: #3b82f6;
 }
 
 .empty-state {
@@ -140,11 +130,42 @@
   align-items: center;
   justify-content: center;
   min-height: 200px;
-  color: #cbd5e1;
+  color: #808080;
   font-size: 0.95rem;
-  background: #1e293b;
-  border: 1px dashed #475569;
-  border-radius: 12px;
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-radius: 6px;
+}
+
+.operation-card {
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-left: 3px solid #3b82f6;
+  border-radius: 6px;
+  padding: 1rem;
+  transition: border-color 0.15s;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.operation-card:hover {
+  background: #252525;
+  border-color: #555555;
+  transform: none;
+}
+
+.operation-title {
+  color: #f0f0f0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.operation-meta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #808080;
 }
 
 .operations-list {
@@ -155,19 +176,19 @@
 }
 
 .operation-card {
-  background: #1e293b;
-  border: 1px solid #475569;
-  border-left: 3px solid #0ea5e9;
-  border-radius: 8px;
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-left: 3px solid #3b82f6;
+  border-radius: 6px;
   padding: 1rem;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s;
   animation: fadeIn 0.3s ease-out;
 }
 
 .operation-card:hover {
-  background: #334155;
-  border-color: #0ea5e9;
-  transform: translateX(4px);
+  background: #252525;
+  border-color: #555555;
+  transform: none;
 }
 
 @keyframes fadeIn {
@@ -191,7 +212,7 @@
 .operation-info { flex: 1; }
 
 .operation-title {
-  color: #f1f5f9;
+  color: #f0f0f0;
   font-weight: 600;
   font-size: 0.95rem;
   margin-bottom: 0.25rem;
@@ -202,18 +223,18 @@
   gap: 0.75rem;
   align-items: center;
   font-size: 0.8rem;
-  color: #cbd5e1;
+  color: #808080;
 }
 
 .operation-meta small {
   font-family: monospace;
-  background: #0f172a;
+  background: #111111;
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
-  color: #94a3b8;
+  color: #808080;
 }
 
-.time { color: #64748b; }
+.time { color: #606060; }
 
 .operation-statuses {
   display: flex;

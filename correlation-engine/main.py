@@ -25,7 +25,7 @@ except Exception:
     prometheus_client = _DummyProm()
 from pydantic import BaseModel
 from ai_core.rca import determine_root_cause, determine_severity, primary_metric
-from ai_core.anomaly import RollingZScoreDetector
+from ai_core.anomaly import IsolationForestDetector
 from ai_core.incident import build_incident
 from ai_core.correlation import correlate_batch
 from ai_core.validator import validate_event, ValidationError
@@ -44,7 +44,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(MetricsMiddleware)
 
-_detector = RollingZScoreDetector(z_threshold=3.0, window_size=300)
+_detector = IsolationForestDetector(z_threshold=3.0, window_size=300)
 
 
 class AnomalyIn(BaseModel):

@@ -29,6 +29,7 @@ def get_engine():
         pool_size=20,
         max_overflow=10,
         pool_pre_ping=True,
+        pool_timeout=30,
         future=True,
     )
 
@@ -51,16 +52,9 @@ def get_pool_status() -> dict[str, float | int]:
 
 
 def install_psycopg2_pool() -> None:
-    import psycopg2
-
-    if getattr(psycopg2, "_koral_pool_installed", False):
-        return
-
-    def pooled_connect(*args, **kwargs):
-        return get_engine().raw_connection()
-
-    psycopg2.connect = pooled_connect
-    psycopg2._koral_pool_installed = True
+    """No-op: pool is managed via SQLAlchemy engine in get_engine().
+    Direct psycopg2.connect calls should bypass the pool."""
+    pass
 
 
 def close_pool() -> None:

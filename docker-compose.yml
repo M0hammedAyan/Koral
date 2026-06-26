@@ -61,28 +61,32 @@ services:
     restart: unless-stopped
     networks: [koral]
     ports:
-      - "8000:8000"
+      - "8080:8000"
     volumes:
       - koral-data:/data
+    command: ["sh", "-c", "alembic upgrade head 2>/dev/null; exec uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 1"]
     environment:
       DB_TYPE:                postgres
-      DB_HOST:                pgbouncer
-      DB_PORT:                6432
-      DATABASE_URL:           ${DATABASE_URL_PGBOUNCER:-postgresql://postgres:%23%40Ayan2005@pgbouncer:6432/koral}
-      DB_USER:                ${POSTGRES_USER:-postgres}
-      DB_PASS:                ${POSTGRES_PASSWORD:-postgres}
-      DB_NAME:                ${POSTGRES_DB:-koral}
+      DB_HOST:                postgres
+      DB_PORT:                5432
+      DATABASE_URL:           postgresql://postgres:koralpass123@postgres:5432/koral
+      DB_USER:                postgres
+      DB_PASS:                koralpass123
+      DB_NAME:                koral
       REDIS_URL:              redis://redis:6379/0
       CORRELATION_ENGINE_URL: http://correlation-engine:8005
       AI_ENGINE_URL:          http://ai-engine:8006
       NAMESPACE:              ${KORAL_NAMESPACE:-koral-system}
       ALLOWED_ORIGINS:        ${ALLOWED_ORIGINS:-http://localhost:3000,http://frontend:3000}
-      API_KEY:                ${API_KEY:-dev-api-key}
-      JWT_SECRET:             ${JWT_SECRET:-dev-jwt-secret}
+      API_KEY:                ${API_KEY:-koral-dev-api-key-2024}
+      API_KEY_ADMIN:          ${API_KEY_ADMIN:-koral-admin-key-secret}
+      API_KEY_OPERATOR:       ${API_KEY_OPERATOR:-koral-operator-key-secret}
+      API_KEY_VIEWER:         ${API_KEY_VIEWER:-koral-viewer-key-readonly}
+      JWT_SECRET:             ${JWT_SECRET:-koral-jwt-secret-token-super-random-2024}
       DISABLE_AUTH:           ${DISABLE_AUTH:-false}
+      OTEL_SDK_DISABLED:      "true"
+      UVICORN_WORKERS:        "1"
     depends_on:
-      pgbouncer:
-        condition: service_healthy
       postgres:
         condition: service_healthy
 
@@ -160,9 +164,9 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB:       ${POSTGRES_DB:-koral}
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: koralpass123
+      POSTGRES_DB:       koral
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s

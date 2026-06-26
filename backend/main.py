@@ -89,6 +89,9 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 def _configure_tracing(app: FastAPI) -> None:
     if not OTEL_AVAILABLE:
         return
+    if os.getenv("OTEL_SDK_DISABLED", "false").lower() in ("true", "1", "yes"):
+        logger.info("OpenTelemetry tracing disabled via OTEL_SDK_DISABLED")
+        return
     provider = TracerProvider(
         resource=Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "koral-backend")})
     )

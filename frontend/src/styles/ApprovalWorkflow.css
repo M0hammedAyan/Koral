@@ -14,9 +14,9 @@
 }
 
 .approval-list {
-  background: #1e293b;
-  border: 1px solid #475569;
-  border-radius: 12px;
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-radius: 6px;
   padding: 1rem;
   overflow-y: auto;
   display: flex;
@@ -25,33 +25,33 @@
 
 .approval-list h3 {
   margin: 0 0 0.75rem 0;
-  color: #f1f5f9;
+  color: #f0f0f0;
   font-size: 0.95rem;
   font-weight: 600;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #475569;
+  border-bottom: 1px solid #333333;
 }
 
 .approval-item {
   padding: 0.75rem;
   margin-bottom: 0.5rem;
-  background: #0f172a;
-  border: 1px solid #475569;
-  border-radius: 8px;
+  background: #111111;
+  border: 1px solid #333333;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s;
 }
 
 .approval-item:hover {
-  border-color: #0ea5e9;
-  background: #334155;
-  transform: translateX(3px);
+  border-color: #555555;
+  background: #1a1a1a;
+  transform: none;
 }
 
 .approval-item.active {
-  background: rgba(14, 165, 233, 0.1);
-  border-color: #0ea5e9;
-  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
+  background: #1a1a1a;
+  border-color: #3b82f6;
+  box-shadow: none;
 }
 
 .approval-item-header {
@@ -92,10 +92,10 @@
   height: 100%;
   min-height: 300px;
   text-align: center;
-  color: #cbd5e1;
-  background: #1e293b;
-  border: 1px solid #475569;
-  border-radius: 12px;
+  color: #808080;
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-radius: 6px;
   gap: 0.5rem;
 }
 
@@ -112,9 +112,9 @@
 }
 
 .approval-details {
-  background: #1e293b;
-  border: 1px solid #475569;
-  border-radius: 12px;
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-radius: 6px;
   padding: 1.5rem;
   overflow-y: auto;
   display: flex;
@@ -123,19 +123,19 @@
 }
 
 .details-header {
-  border-bottom: 1px solid #475569;
+  border-bottom: 1px solid #333333;
   padding-bottom: 0.75rem;
 }
 
 .details-header h3 {
   margin: 0 0 0.4rem 0;
-  color: #f1f5f9;
+  color: #f0f0f0;
   font-size: 1rem;
   font-weight: 600;
 }
 
 .details-header small {
-  color: #64748b;
+  color: #606060;
   font-size: 0.78rem;
   font-family: monospace;
 }

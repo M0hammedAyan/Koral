@@ -125,21 +125,20 @@ export class WebSocketService {
   private _connect() {
     try {
       // In dev (npm start), CRA proxy does not support WebSocket.
-      // Connect directly to backend port 8000.
-      // In production (nginx), use the same host.
+      // Connect directly to backend port 8080.
+      // In production (nginx), use the same host which proxies /ws/ to backend.
       const isDev = window.location.port === '3000';
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const host  = isDev ? 'localhost:8000' : window.location.host;
-      const wsUrl = `${proto}://${host}/ws/live`;
+      const host  = isDev ? 'localhost:8080' : window.location.host;
+      const wsUrl = `${proto}://${host}/ws/live?api_key=koral-dev-api-key-2024`;
       this.ws = new WebSocket(wsUrl);
       this.ws.onopen  = () => { console.log('[KORAL] WS connected to', wsUrl); this.onOpenCb?.(); };
-      this.ws.onclose = () => { console.log('[KORAL] WS closed'); this.onCloseCb?.(); };
+      this.ws.onclose = () => { console.log('[KORAL] WS closed'); this.onCloseCb?.(); setTimeout(() => this._connect(), 5000); };
       this.ws.onmessage = (e) => {
         try { this.listeners.forEach(l => l(JSON.parse(e.data))); } catch {}
       };
       this.ws.onerror = () => {
         this.onCloseCb?.();
-        setTimeout(() => this._connect(), 3000);
       };
     } catch (e) {
       console.warn('[KORAL] WS init failed:', e);

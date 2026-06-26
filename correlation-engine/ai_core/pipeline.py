@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Dict, Iterable, List, Tuple
 
-from .anomaly import RollingZScoreDetector
+from .anomaly import IsolationForestDetector
 from .incident import build_incident
 from .schema import Incident, KoralEvent
 
@@ -24,7 +24,7 @@ def process_events(
     reporting correlated anomalies are represented in one object.
     """
 
-    detector = RollingZScoreDetector(z_threshold=z_threshold, window_size=window_size)
+    detector = IsolationForestDetector(z_threshold=z_threshold, window_size=window_size)
     scored_events = detector.detect_many(raw_events)
     anomalies = [event for event in scored_events if event["is_anomaly"]]
     grouped = _group_anomalies(anomalies, window_size)

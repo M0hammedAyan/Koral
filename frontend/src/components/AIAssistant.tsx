@@ -44,10 +44,10 @@ export const AIAssistant: React.FC = () => {
   useEffect(() => {
     loadAIData();
 
-    // WebSocket — direct to backend port 8000 in dev
+    // WebSocket — connect to backend via nginx proxy or direct
     const isDev = window.location.port === '3000';
-    const host  = isDev ? 'localhost:8000' : window.location.host;
-    const ws    = new WebSocket(`ws://${host}/ws/live`);
+    const host  = isDev ? 'localhost:8080' : window.location.host;
+    const ws    = new WebSocket(`ws://${host}/ws/live?api_key=koral-dev-api-key-2024`);
 
     ws.onmessage = (e) => {
       try {
