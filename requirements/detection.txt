@@ -1,0 +1,5 @@
+# KORAL Detection Layer Requirements
+-r base.txt
+rrcf==0.4.4
+statsmodels>=0.14.0
+scikit-learn>=1.4.0

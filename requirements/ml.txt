@@ -1,0 +1,3 @@
+# KORAL ML Layer Requirements (LSTM + optimizer)
+-r detection.txt
+torch>=2.0.0

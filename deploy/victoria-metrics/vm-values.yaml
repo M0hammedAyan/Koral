@@ -1,0 +1,24 @@
+# VictoriaMetrics Single-Node — KORAL Configuration
+# Install: helm install vm vm/victoria-metrics-single -f deploy/victoria-metrics/vm-values.yaml -n koral-system
+
+server:
+  retentionPeriod: "90d"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  persistentVolume:
+    enabled: true
+    size: 50Gi
+  extraArgs:
+    dedup.minScrapeInterval: 10s
+    search.maxUniqueTimeseries: 100000
+    search.maxQueryDuration: 60s
+
+# Remote write endpoint for Prometheus
+# Add to prometheus.yml:
+#   remote_write:
+#     - url: http://victoria-metrics:8428/api/v1/write

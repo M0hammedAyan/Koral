@@ -1,0 +1,77 @@
+# Falco Helm Values — KORAL Configuration
+# Install: helm install falco falcosecurity/falco -f deploy/falco/falco-values.yaml -n koral-system
+
+driver:
+  kind: ebpf  # eBPF mode — safer than kernel module, no reboot required
+
+falcosidekick:
+  enabled: true
+  config:
+    alertmanager:
+      hostport: "http://alertmanager:9093"
+      minimumpriority: "warning"
+      customfields:
+        source: "falco"
+        cluster: "koral-monitored"
+    webhook:
+      address: "http://koral-api:8000/webhooks/falco"
+      minimumpriority: "warning"
+
+customRules:
+  koral-rules.yaml: |-
+    - rule: KORAL Crypto Mining - Known Miner Process
+      desc: Detects common cryptocurrency mining processes
+      condition: >
+        spawned_process and container and
+        proc.name in (xmrig, cryptonight, minerd, ethminer, nbminer, lolminer, t-rex, gminer, phoenixminer)
+      output: >
+        Crypto miner detected (pod=%k8s.pod.name namespace=%k8s.ns.name
+        process=%proc.name parent=%proc.pname cmdline=%proc.cmdline)
+      priority: CRITICAL
+      tags: [koral, crypto_mining, attack]
+
+    - rule: KORAL Suspicious Process Spawn
+      desc: Generic process spawned with unusual parent in container
+      condition: >
+        spawned_process and container and
+        proc.pname in (sh, bash, python, python3, node) and
+        not proc.name in (node, python, python3, npm, pip, gunicorn, uvicorn, celery)
+      output: >
+        Suspicious process spawn (pod=%k8s.pod.name namespace=%k8s.ns.name
+        process=%proc.name parent=%proc.pname cmdline=%proc.cmdline)
+      priority: WARNING
+      tags: [koral, suspicious_process]
+
+    - rule: KORAL Container Escape Attempt
+      desc: Attempt to access host filesystem from container
+      condition: >
+        open_write and container and
+        (fd.name startswith /proc/sys/kernel or
+         fd.name startswith /proc/sysrq-trigger or
+         fd.name startswith /sys/kernel) and
+        not proc.name in (fluentd, node-exporter, falco)
+      output: >
+        Container escape attempt (pod=%k8s.pod.name namespace=%k8s.ns.name
+        file=%fd.name process=%proc.name)
+      priority: CRITICAL
+      tags: [koral, container_escape, attack]
+
+    - rule: KORAL Suspicious Outbound Connection
+      desc: Unusual outbound connection from container to external IP
+      condition: >
+        outbound and container and
+        not fd.sip.name in (dns, kube-dns, coredns) and
+        fd.rport != 53 and fd.rport != 443 and fd.rport != 80
+      output: >
+        Suspicious outbound connection (pod=%k8s.pod.name namespace=%k8s.ns.name
+        dest=%fd.rip:%fd.rport process=%proc.name)
+      priority: WARNING
+      tags: [koral, data_exfil, suspicious_network]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
